@@ -1,44 +1,14 @@
-#include <stdio.h>
-#include <stdlib.h>
-#define RGFW_IMPLEMENTATION
-#include "RGFW.h"
-#include <SDL2/SDL.h>
-// #include <pulse/sample.h>
-// #include <pulse/simple.h>
-// #include <pulse/error.h> 
-
+// #include <stdio.h>
+// #include <stdint.h>
+// #include <stdlib.h>
+// #include <stdbool.h>
+#include <X11/Xlib.h>
+#include <pulse/simple.h>
+#include <pulse/error.h>
 #include "game.h"
-
 #define NOB_IMPLEMENTATION
 #define NOB_STRIP_PREFIX
 #include "nob.h"
-
-static void stretch_nearest(uint32_t* dst, int dst_w, int dst_h, uint32_t* src, int src_w, int src_h)
-{
-    float x_ratio = (float)src_w / dst_w;
-    float y_ratio = (float)src_h / dst_h;
-    for (int y = 0; y < dst_h; y++) {
-        int src_y = (int)(y * y_ratio);
-        uint32_t* dst_row = dst + y * dst_w;
-        uint32_t* src_row = src + src_y * src_w;
-        for (int x = 0; x < dst_w; x++) {
-            int src_x = (int)(x * x_ratio);
-            dst_row[x] = src_row[src_x];
-        }
-    }
-}
-
-static void audio_callback(void *userdata, Uint8 *stream, int len) {
-    Game *game = (Game*)userdata;
-    int bytes_per_frame = (int)(game->audio_sample_rate / game->target_fps) * game->audio_channels * sizeof(int16_t);
-    int offset = 0;
-    while (len > 0) {
-        int copy = len < bytes_per_frame ? len : bytes_per_frame;
-        memcpy(stream + offset, game->audio, copy);
-        len -= copy;
-        offset += copy;
-    }
-}
 
 int main(void)
 {
@@ -50,122 +20,139 @@ int main(void)
     printf("game.audio_sample_rate = %zu\n", game.audio_sample_rate);
     printf("game.audio_channels    = %zu\n", game.audio_channels);
 
-    if (SDL_Init(SDL_INIT_AUDIO) < 0) {
-        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
-        return 1;
-    }
-    SDL_AudioSpec want, have;
-    SDL_zero(want);
-    want.freq = (int)game.audio_sample_rate;
-    want.format = AUDIO_S16LSB;
-    want.channels = (uint8_t)game.audio_channels;
-    want.samples = (uint16_t)(game.audio_sample_rate/game.target_fps);
-    // want.samples = 2048;
-    want.callback = audio_callback;
-    want.userdata = &game;
+    pa_sample_spec ss = {
+        .format = PA_SAMPLE_S16LE,
+        .rate = game.audio_sample_rate,
+        .channels = game.audio_channels,
+    };
 
-    if (SDL_OpenAudio(&want, &have) < 0) {
-        fprintf(stderr, "SDL_OpenAudio failed: %s\n", SDL_GetError());
-        return 1;
-    }
-    SDL_PauseAudio(0);
+    pa_buffer_attr ba = {
+        .maxlength = -1,           // 自动
+        .tlength   = 131072,        // 目标缓冲区大小，建议 32768 或 65536
+        .prebuf    = -1,           // 自动
+        .minreq    = -1,           // 自动
+    };
 
-    RGFW_window* window = RGFW_createWindow(
+    int error = 0;
+    pa_simple *s = pa_simple_new(
+            NULL,
             "The Game",
-            0, 0,
-            (int)game.display_width, (int)game.display_height,
-            RGFW_windowCenter | RGFW_windowNoResize);
-
-    if (!window) {
-        fprintf(stderr, "ERROR: failed to create window\n");
+            PA_STREAM_PLAYBACK,
+            NULL,
+            "audio",
+            &ss,
+            NULL,
+            &ba,
+            &error);
+    if (s == NULL) {
+        fprintf(stderr, "ERROR: pa_simple_new() failed: %s\n", pa_strerror(error));
         return 1;
     }
 
-    int phys_w, phys_h;
-    if (!RGFW_window_getSizeInPixels(window, &phys_w, &phys_h)) {
-        phys_w = (int)game.display_width;
-        phys_h = (int)game.display_height;
-    }
-    printf("Physical window size: %dx%d\n", phys_w, phys_h);
-
-    uint32_t* stretched = (uint32_t*)malloc(phys_w * phys_h * sizeof(uint32_t));
-    if (!stretched) {
-        fprintf(stderr, "ERROR: out of memory for stretch buffer\n");
-        RGFW_window_close(window);
+    Display *display = XOpenDisplay(NULL);
+    if (display == NULL) {
+        fprintf(stderr, "ERROR: could not open the default display\n");
         return 1;
     }
 
-    RGFW_surface surface;
-    if (!RGFW_createSurfacePtr((uint8_t*)stretched, phys_w, phys_h,
-                RGFW_formatARGB8, &surface)) {
-        fprintf(stderr, "ERROR: failed to create surface\n");
-        free(stretched);
-        RGFW_window_close(window);
-        return 1;
-    }
+    printf("display = %p\n", display);
 
-    RGFW_window_setExitKey(window, RGFW_keyEscape);
-    uint64_t delta_time = NANOS_PER_SEC / game.target_fps;
-    int quit = 0;
+    Window window = XCreateSimpleWindow(
+                        display,
+                        XDefaultRootWindow(display),
+                        0, 0,
+                        game.display_width, game.display_height,
+                        0,
+                        0,
+                        0);
 
-    while (!quit && !RGFW_window_shouldClose(window)) {
-        static int frame_count = 0;
-        static uint64_t last_frame = 0;
+    printf("window = %lu\n", window);
 
-        frame_count++;
-        uint64_t frame_start = nanos_since_unspecified_epoch();
-        if (frame_start - last_frame >= NANOS_PER_SEC) {
-            printf("FPS: %3d\n", frame_count);
-            fflush(stdout);
-            frame_count = 0;
-            last_frame = frame_start;
-        }
+    XWindowAttributes wa = {0};
+    XGetWindowAttributes(display, window, &wa);
 
+    XImage *image = XCreateImage(
+            display,
+            wa.visual,
+            wa.depth,
+            ZPixmap,
+            0,
+            (char *) game.display,
+            game.display_width,
+            game.display_height,
+            32,
+            game.display_width*sizeof(*game.display));
 
-        RGFW_event event;
-        while (RGFW_window_checkEvent(window, &event)) {
+    printf("image = %p\n", image);
+
+    GC gc = XCreateGC(display, window, 0, NULL);
+
+    printf("gc = %p\n", gc);
+
+    Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
+    XSetWMProtocols(display, window, &wm_delete_window, 1);
+
+    XSelectInput(display, window, KeyPressMask | PointerMotionMask);
+
+    XStoreName(display, window, "The Game");
+    XMapWindow(display, window);
+
+    uint64_t delta_time = NANOS_PER_SEC/game.target_fps;
+
+    bool quit = false;
+    while (!quit) {
+        uint64_t begin = nanos_since_unspecified_epoch();
+        while (XPending(display) > 0) {
+            XEvent event = {0};
+            XNextEvent(display, &event);
             switch (event.type) {
-                case RGFW_keyPressed:
-                    if (event.key.value == RGFW_keyEscape) {
-                        quit = 1;
+                case KeyPress:
+                    {
+                    switch (XLookupKeysym(&event.xkey, 0)) {
+                        case 'q':
+                            quit = true;
+                            break;
+                    }
+                }
+                break;
+
+                case MotionNotify:
+                {
+                    // event.xmotion.x, event.xmotion.y
+                }
+                break;
+
+                case ClientMessage:
+                {
+                    if (event.xclient.message_type == XInternAtom(display, "WM_PROTOCOLS", True) &&
+                            (Atom)event.xclient.data.l[0] == wm_delete_window) {
+                        quit = true;
                     }
                     break;
-                case RGFW_mousePosChanged:
-                    break;
-                case RGFW_windowClose:
-                    quit = 1;
-                    break;
-                default:
-                    break;
+                }
+                break;
+
+                default: {}
             }
         }
+
         game_update();
 
-        stretch_nearest(stretched, phys_w, phys_h,
-                (uint32_t*)game.display,
-                (int)game.display_width, (int)game.display_height);
+        uint64_t end = nanos_since_unspecified_epoch();
 
-        RGFW_window_blitSurface(window, &surface);
-
-        uint64_t frame_end = nanos_since_unspecified_epoch();
-        uint64_t delta = frame_end - frame_start;
-        if (delta < delta_time) usleep((delta_time - delta) / 1000);
-
-        static uint64_t total_delta = 0;
-        static int frame_counter = 0;
-        // 在每帧末尾（usleep 之后）：
-        total_delta += delta;
-        frame_counter++;
-        if (frame_counter % 600 == 0) {
-            float avg_ms = ((float)total_delta / 600) / 1e6;
-            printf("Avg frame time: %.3f ms (target 16.667 ms)\n", avg_ms);
-            total_delta = 0;
-            frame_counter = 0;
+        if (end - begin < delta_time) {
+            struct timespec ts = {
+                .tv_sec = 0,
+                .tv_nsec = (delta_time - end + begin),
+            };
+            nanosleep(&ts, NULL);
         }
+
+        XPutImage(display, window, gc, image, 0, 0, 0, 0, game.display_width, game.display_height);
+        error = 0;
+        size_t audio_size_in_bytes = game.audio_sample_rate/game.target_fps*game.audio_channels*sizeof(*game.audio);
+        pa_simple_write(s, game.audio, audio_size_in_bytes, &error);
     }
 
-    RGFW_surface_freePtr(&surface);
-    free(stretched);
-    RGFW_window_close(window);
     return 0;
 }

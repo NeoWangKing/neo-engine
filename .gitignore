@@ -1,5 +1,6 @@
 nob
 nob.old
+.DS_Store
 .clangd
 build/
 *.bak
