@@ -4,7 +4,7 @@
 #define BUILD_FOLDER "build/"
 #define SRC_FOLDER   "src/"
 
-#ifdef __Apple__
+#ifdef __APPLE__
 void cmd_cflags_x11(Nob_Cmd *cmd)
 {
     cmd_append(cmd, "-I/opt/homebrew/Cellar/libx11/1.8.13/include");
@@ -83,7 +83,9 @@ void cmd_framework(Nob_Cmd *cmd)
     (void) cmd;
 }
 #else
+
 #error "Unsupported platform"
+
 #endif
 
 void cmd_build(Nob_Cmd *cmd)
