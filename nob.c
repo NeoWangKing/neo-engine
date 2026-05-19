@@ -4,6 +4,7 @@
 #define BUILD_FOLDER "build/"
 #define SRC_FOLDER   "src/"
 
+#ifdef __Apple__
 void cmd_cflags_x11(Nob_Cmd *cmd)
 {
     cmd_append(cmd, "-I/opt/homebrew/Cellar/libx11/1.8.13/include");
@@ -44,6 +45,47 @@ void cmd_libs_pa(Nob_Cmd *cmd)
     cmd_append(cmd, "-pthread");
 }
 
+void cmd_framework(Nob_Cmd *cmd)
+{
+    nob_cmd_append(cmd, "-framework", "CoreVideo");
+    nob_cmd_append(cmd, "-framework", "Cocoa");
+    nob_cmd_append(cmd, "-framework", "IOKit");
+}
+#elif __linux__
+void cmd_cflags_x11(Nob_Cmd *cmd)
+{
+    (void) cmd;
+}
+
+void cmd_libs_x11(Nob_Cmd *cmd)
+{
+    cmd_append(cmd, "-lX11");
+    cmd_append(cmd, "-lXext"); 
+}
+
+void cmd_cflags_pa(Nob_Cmd *cmd)
+{
+    (void) cmd;
+}
+
+void cmd_libs_pa(Nob_Cmd *cmd)
+{
+    cmd_append(cmd, "-lpulse");
+    cmd_append(cmd, "-lpulse-simple");
+    cmd_append(cmd, "-lpulse-mainloop-glib");
+    cmd_append(cmd, "-lglib-2.0");
+    // cmd_append(cmd, "-lintl");
+    cmd_append(cmd, "-pthread");
+}
+
+void cmd_framework(Nob_Cmd *cmd)
+{
+    (void) cmd;
+}
+#else
+#error "Unsupported platform"
+#endif
+
 void cmd_build(Nob_Cmd *cmd)
 {
     cmd_append(cmd, "-o", BUILD_FOLDER"main");
@@ -53,13 +95,6 @@ void cmd_src(Nob_Cmd *cmd)
 {
     cmd_append(cmd, SRC_FOLDER"main.c");
     cmd_append(cmd, SRC_FOLDER"game.c");
-}
-
-void cmd_framework(Nob_Cmd *cmd)
-{
-    nob_cmd_append(cmd, "-framework", "CoreVideo");
-    nob_cmd_append(cmd, "-framework", "Cocoa");
-    nob_cmd_append(cmd, "-framework", "IOKit");
 }
 
 int main(int argc, char **argv) {

@@ -48,10 +48,10 @@ static float angle = 0;
 
 static float cx = (float)DISPLAY_WIDTH/2;
 static float cy = (float)DISPLAY_HEIGHT/2;
-static float vx = 1000;
-static float vy = 1000;
+static float vx = 500;
+static float vy = 0;
 static float ax = 0;
-static float ay = 0;
+static float ay = 980;
 
 void game_update(void)
 {

@@ -1,0 +1,10 @@
+CompileFlags:
+  Add:
+    - "-std=gnu11"
+    - "-I."
+    - "-I./include"
+    - "-x"
+    - "c"
+
+SemanticTokens:
+  DisabledKinds: [InactiveCode]
