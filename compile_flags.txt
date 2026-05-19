@@ -1,5 +1,0 @@
--std=gnu11
--I.
--Iinclude
--x
-c
