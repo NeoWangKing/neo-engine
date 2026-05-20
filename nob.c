@@ -110,6 +110,8 @@ int main(int argc, char **argv) {
     cmd_cflags_x11(&cmd);
     cmd_cflags_pa(&cmd);
 
+    cmd_append(&cmd, "-O3");
+    cmd_append(&cmd, "-march=native");
     cmd_build(&cmd);
     cmd_src(&cmd);
 

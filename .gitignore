@@ -3,6 +3,7 @@ nob.old
 .DS_Store
 .clangd
 compile_flags.txt
+compile_commands.json
 build/
 *.bak
 

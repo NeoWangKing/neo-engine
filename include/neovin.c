@@ -1040,7 +1040,7 @@ NEOVINCDEF float NVC_Vec2D_Dot(Vec2D vec1, Vec2D vec2);
 NEOVINCDEF Vec3D NVC_Vec2D_Cross(Vec2D vec1, Vec2D vec2);
 
 // Vec3D
-NEOVINCDEF void  NVC_ROTATE_POINT(Vec3D *p, Vec3D refp, Vec3D axis, float angle);
+NEOVINCDEF void NVC_ROTATE_POINT(Vec3D *p, Vec3D refp, Vec3D axis, float angle);
 NEOVINCDEF float NVC_Vec3D_Length(Vec3D vec);
 NEOVINCDEF Vec3D NVC_Vec3D_Plus(Vec3D vec1, Vec3D vec2);
 NEOVINCDEF Vec3D NVC_Vec3D_Minus(Vec3D vec1, Vec3D vec2);

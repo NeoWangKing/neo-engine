@@ -2,14 +2,20 @@
 // #include <stdint.h>
 // #include <stdlib.h>
 // #include <stdbool.h>
+#include <ctype.h>
 #include <time.h>
+#include <X11/X.h>
 #include <X11/Xlib.h>
+#include <X11/keysym.h>
 #include <pulse/simple.h>
 #include <pulse/error.h>
 #include "game.h"
 #define NOB_IMPLEMENTATION
 #define NOB_STRIP_PREFIX
 #include "nob.h"
+
+#define NVC_AA_RES 1
+#include "neovin.c"
 
 int main(void)
 {
@@ -59,13 +65,13 @@ int main(void)
     printf("display = %p\n", display);
 
     Window window = XCreateSimpleWindow(
-                        display,
-                        XDefaultRootWindow(display),
-                        0, 0,
-                        game.display_width, game.display_height,
-                        0,
-                        0,
-                        0);
+            display,
+            XDefaultRootWindow(display),
+            0, 0,
+            game.display_width, game.display_height,
+            0,
+            0,
+            0);
 
     printf("window = %lu\n", window);
 
@@ -93,7 +99,7 @@ int main(void)
     Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
     XSetWMProtocols(display, window, &wm_delete_window, 1);
 
-    XSelectInput(display, window, KeyPressMask | PointerMotionMask);
+    XSelectInput(display, window, KeyPressMask | KeyReleaseMask | PointerMotionMask);
 
     XStoreName(display, window, "The Game");
     XMapWindow(display, window);
@@ -109,29 +115,39 @@ int main(void)
             switch (event.type) {
                 case KeyPress:
                     {
-                    switch (XLookupKeysym(&event.xkey, 0)) {
-                        case 'q':
+                        KeySym key = XLookupKeysym(&event.xkey, 0);
+                        if (key >= 'A' && key <= 'Z') key = tolower(key);
+
+                        if (key == XK_Escape) {
                             quit = true;
                             break;
+                        }
+
+                        game_key_down(key);
+                        break;
                     }
-                }
-                break;
+
+                case KeyRelease:
+                    {
+                        KeySym key = XLookupKeysym(&event.xkey, 0);
+                        if (key >= 'A' && key <= 'Z') key = tolower(key);
+                        game_key_up(key);
+                        break;
+                    }
 
                 case MotionNotify:
-                {
-                    // event.xmotion.x, event.xmotion.y
-                }
-                break;
+                    {
+                        break;
+                    }
 
                 case ClientMessage:
-                {
-                    if (event.xclient.message_type == XInternAtom(display, "WM_PROTOCOLS", True) &&
-                            (Atom)event.xclient.data.l[0] == wm_delete_window) {
-                        quit = true;
+                    {
+                        if (event.xclient.message_type == XInternAtom(display, "WM_PROTOCOLS", True) &&
+                                (Atom)event.xclient.data.l[0] == wm_delete_window) {
+                            quit = true;
+                        }
+                        break;
                     }
-                    break;
-                }
-                break;
 
                 default: {}
             }
@@ -139,15 +155,32 @@ int main(void)
 
         game_update();
 
+        NVC_Canvas nvc_oc = {
+            .pixels = (uint32_t*)game.display,
+            .width = game.display_width,
+            .height = game.display_height,
+            .stride = game.display_width,
+        };
+
         uint64_t end = nanos_since_unspecified_epoch();
 
-        if (end - begin < delta_time) {
+        uint64_t delta = end - begin;
+
+        if (delta < delta_time) {
             struct timespec ts = {
                 .tv_sec = 0,
-                .tv_nsec = (delta_time - end + begin),
+                .tv_nsec = (delta_time - delta),
             };
             nanosleep(&ts, NULL);
         }
+
+        end = nanos_since_unspecified_epoch();
+
+        delta = end - begin;
+        int FPS = 1.0/((double)delta/NANOS_PER_SEC);
+
+        float font_size = 24;
+        NVC_Text(nvc_oc, temp_sprintf("FPS = %d", FPS), Vec2D(10,10), NVC_default_font, font_size, 0xFFAAAAFF);
 
         XPutImage(display, window, gc, image, 0, 0, 0, 0, game.display_width, game.display_height);
         error = 0;

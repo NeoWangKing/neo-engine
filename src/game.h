@@ -3,7 +3,13 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
+typedef struct {
+    bool keyboard[65536];
+    int mouse_dx;
+    int mouse_dy;
+} Controls;
 
 typedef struct {
     size_t target_fps;
@@ -15,6 +21,9 @@ typedef struct {
     int16_t *audio;
     size_t audio_sample_rate;
     size_t audio_channels;
+
+    char *title;
+    Controls *controls;
 } Game;
 
 Game game_init(void);
