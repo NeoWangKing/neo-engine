@@ -37,7 +37,16 @@ static Controls controls = {0};
 typedef struct {
     uint8_t b, g, r, a;
 } Color;
-// typedef uint32_t Color;
+
+static inline Color color_lerp(Color c1, Color c2, float t)
+{
+    return (Color) {
+        .r = lerp(c1.r, c2.r, t),
+        .g = lerp(c1.g, c2.g, t),
+        .b = lerp(c1.b, c2.b, t),
+        .a = lerp(c1.a, c2.a, t),
+    };
+}
 
 static uint32_t BACKGROUND_COLOR = 0xFFFFFFAA;
 static uint32_t FOREGROUND_COLOR = 0xFF9999FF;
@@ -55,26 +64,31 @@ static int16_t audio[AUDIO_CAPACITY];
 static struct {
     int key;
     Vector3 vector;
-    float angle;
+    float angle_yaw;
+    float angle_pit;
 } cam_ctrl[] = {
-    { .key = 'w',       .vector = { 0.0f,  0.0f,  1.0f}, .angle = 0.0f},
-    { .key = 's',       .vector = { 0.0f,  0.0f, -1.0f}, .angle = 0.0f},
-    { .key = 'a',       .vector = {-1.0f,  0.0f,  0.0f}, .angle = 0.0f},
-    { .key = 'd',       .vector = { 1.0f,  0.0f,  0.0f}, .angle = 0.0f},
-    { .key = ' ',       .vector = { 0.0f,  1.0f,  0.0f}, .angle = 0.0f},
-    { .key = KEY_CTRL_L,.vector = { 0.0f, -1.0f,  0.0f}, .angle = 0.0f},
-    { .key = 'q',       .vector = { 0.0f,  0.0f,  0.0f}, .angle = 1.0f},
-    { .key = 'e',       .vector = { 0.0f,  0.0f,  0.0f}, .angle =-1.0f},
+    { .key = 'w',       .vector = { 0.0f,  0.0f,  1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 's',       .vector = { 0.0f,  0.0f, -1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 'a',       .vector = {-1.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 'd',       .vector = { 1.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = ' ',       .vector = { 0.0f,  1.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = KEY_CTRL_L,.vector = { 0.0f, -1.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 'q',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw =  1.0f, .angle_pit =  0.0f},
+    { .key = 'e',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw = -1.0f, .angle_pit =  0.0f},
+    { .key = 'r',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  1.0f },
+    { .key = 'f',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit = -1.0f },
 };
 
 static struct {
     Vector3s vertices;
     Colors   colors;
     Vector3  cam_pos;
-    float  cam_yaw;
+    float    cam_yaw;
+    float    cam_pit;
 } renderer = {
     .cam_pos = {0.0f, 0.0f, -2.0f},
     .cam_yaw = 0.0f,
+    .cam_pit = 0.0f,
 };
 
 static inline void renderer_reset(void)
@@ -94,67 +108,78 @@ static inline void renderer_push_vertex(Vector3 vertex, Color color)
     da_append(&renderer.colors, color);
 }
 
-static inline Vector3 clip_line(Vector3 p1, Vector3 p2, float z_plane)
+static inline Vector3 clip_line(Vector3 p1, Vector3 p2, float z_plane, float *t)
 {
     Vector3 q = { .z = NEAR_CLIP };
-    q.x = (p2.x - p1.x)/(p2.z - p1.z)*(z_plane - p1.z) + p1.x;
-    q.y = (p2.y - p1.y)/(p2.z - p1.z)*(z_plane - p1.z) + p1.y;
+    *t = (z_plane - p1.z)/(p2.z - p1.z);
+    q.x = (p2.x - p1.x)*(*t) + p1.x;
+    q.y = (p2.y - p1.y)*(*t) + p1.y;
     return q;
 }
 
-static inline void renderer_push_triangle(Vector3 v1, Vector3 v2, Vector3 v3, Color c1, Color c2, Color c3)
+static inline void renderer_push_triangle(Vector3 _v1, Vector3 _v2, Vector3 _v3, Color _c1, Color _c2, Color _c3)
 {
-    Vector3 forward = make_vector3(sinf(renderer.cam_yaw), 0.0f, cosf(renderer.cam_yaw));
+    Vector3 forward = make_vector3(cosf(renderer.cam_pit)*sinf(renderer.cam_yaw), sinf(renderer.cam_pit), cosf(renderer.cam_pit)*cosf(renderer.cam_yaw));
     Vector3 world_up = make_vector3(0.0f, 1.0f, 0.0f);
     Vector3 right = vector3_norm(vector3_cross(forward, world_up));
     Vector3 up = vector3_cross(right, forward);
 
-    v1 = vector3_sub(v1, renderer.cam_pos);
-    v2 = vector3_sub(v2, renderer.cam_pos);
-    v3 = vector3_sub(v3, renderer.cam_pos);
-    v1 = make_vector3( vector3_dot(v1, right), vector3_dot(v1, up), vector3_dot(v1, forward));
-    v2 = make_vector3( vector3_dot(v2, right), vector3_dot(v2, up), vector3_dot(v2, forward));
-    v3 = make_vector3( vector3_dot(v3, right), vector3_dot(v3, up), vector3_dot(v3, forward));
-    v1.x *= DISPLAY_ASPECT;
-    v2.x *= DISPLAY_ASPECT;
-    v3.x *= DISPLAY_ASPECT;
+    Vector3 v[3] = { _v1, _v2, _v3 };
+    Color   c[3] = { _c1, _c2, _c3 };
 
-    Vector3 clipped[3] = {0};
-    int clipped_count = 0;
-    Vector3 unclipped[3] = {0};
-    int unclipped_count = 0;
-    if (v1.z < NEAR_CLIP) clipped[clipped_count++] = v1; else unclipped[unclipped_count++] = v1;
-    if (v2.z < NEAR_CLIP) clipped[clipped_count++] = v2; else unclipped[unclipped_count++] = v2;
-    if (v3.z < NEAR_CLIP) clipped[clipped_count++] = v3; else unclipped[unclipped_count++] = v3;
+    for (int i = 0; i < 3; ++i) {
+        v[i] = vector3_sub(v[i], renderer.cam_pos);
+        v[i] = make_vector3(vector3_dot(v[i], right), vector3_dot(v[i], up), vector3_dot(v[i], forward));
+        v[i].x *= DISPLAY_ASPECT;
+    }
 
-    switch (clipped_count) {
+    int clip[3] = {0};
+    int clip_count = 0;
+    int unclip[3] = {0};
+    int unclip_count = 0;
+
+    for (int i = 0; i < 3; ++i) {
+        if (v[i].z < NEAR_CLIP) {
+            clip[clip_count++] = i;
+        } else {
+            unclip[unclip_count++] = i;
+        }
+    }
+
+    switch (clip_count) {
         case 0:
             {
-                renderer_push_vertex(v1, c1);
-                renderer_push_vertex(v2, c2);
-                renderer_push_vertex(v3, c3);
+                for (size_t i = 0; i < 3; ++i) {
+                    renderer_push_vertex(v[i], c[i]);
+                }
                 break;
             }
         case 1:
             {
-                Vector3 q1 = clip_line(clipped[0], unclipped[0], NEAR_CLIP);
-                Vector3 q2 = clip_line(clipped[0], unclipped[1], NEAR_CLIP);
-                renderer_push_vertex(unclipped[0], (Color) { .r = 255, .b = 255, .a = 255 });
-                renderer_push_vertex(q1          , (Color) { .r = 255, .b = 255, .a = 255 });
-                renderer_push_vertex(q2          , (Color) { .r = 255, .b = 255, .a = 255 });
+                float t1, t2;
+                Vector3 q1 = clip_line(v[clip[0]], v[unclip[0]], NEAR_CLIP, &t1);
+                Color cq1 = color_lerp(c[clip[0]], c[unclip[0]], t1);
+                Vector3 q2 = clip_line(v[clip[0]], v[unclip[1]], NEAR_CLIP, &t2);
+                Color cq2 = color_lerp(c[clip[0]], c[unclip[1]], t2);
+                renderer_push_vertex(v[unclip[0]], c[unclip[0]]);
+                renderer_push_vertex(q1          , cq1);
+                renderer_push_vertex(q2          , cq2);
 
-                renderer_push_vertex(unclipped[0], (Color) { .r = 255, .b = 255, .a = 255 });
-                renderer_push_vertex(unclipped[1], (Color) { .r = 255, .b = 255, .a = 255 });
-                renderer_push_vertex(q2          , (Color) { .r = 255, .b = 255, .a = 255 });
+                renderer_push_vertex(v[unclip[0]], c[unclip[0]]);
+                renderer_push_vertex(v[unclip[1]], c[unclip[1]]);
+                renderer_push_vertex(q2          , cq2);
                 break;
             }
         case 2:
             {
-                Vector3 q1 = clip_line(clipped[0], unclipped[0], NEAR_CLIP);
-                Vector3 q2 = clip_line(clipped[1], unclipped[0], NEAR_CLIP);
-                renderer_push_vertex(unclipped[0], (Color) { .g = 255, .a = 255 });
-                renderer_push_vertex(q1          , (Color) { .g = 255, .a = 255 });
-                renderer_push_vertex(q2          , (Color) { .g = 255, .a = 255 });
+                float t1, t2;
+                Vector3 q1 = clip_line(v[clip[0]], v[unclip[0]], NEAR_CLIP, &t1);
+                Color cq1 = color_lerp(c[clip[0]], c[unclip[0]], t1);
+                Vector3 q2 = clip_line(v[clip[1]], v[unclip[0]], NEAR_CLIP, &t2);
+                Color cq2 = color_lerp(c[clip[1]], c[unclip[0]], t2);
+                renderer_push_vertex(v[unclip[0]], c[unclip[0]]);
+                renderer_push_vertex(q1          , cq1);
+                renderer_push_vertex(q2          , cq2);
                 break;
             }
         case 3:
@@ -200,12 +225,18 @@ static void renderer_flush_triangle(Vector3 v1, Vector3 v2, Vector3 v3, Color c1
 
                         // The Fog
                         if (1) {
-                            float z = 1.0f/rz;
-                            if (z >= 1.0) {
-                                z -= 1.0;
-                                uint32_t v = z*255;
-                                if (v > 255) v = 255;
-                                olivec_blend_color(&OLIVEC_PIXEL(oc, x, y), (v<<(3*8)));
+                            float z = 1.0f / rz;
+                            float t = (z - NEAR_CLIP) / (FAR_CLIP - NEAR_CLIP);
+                            if (t < 0.0f) t = 0.0f;
+                            if (t > 1.0f) t = 1.0f;
+
+                            uint32_t alpha = (uint32_t)(t * 255.0f);
+                            if (alpha > 0) {
+                                uint32_t fog_r = OLIVEC_RED(BACKGROUND_COLOR);
+                                uint32_t fog_g = OLIVEC_GREEN(BACKGROUND_COLOR);
+                                uint32_t fog_b = OLIVEC_BLUE(BACKGROUND_COLOR);
+                                uint32_t fog_color = OLIVEC_RGBA(fog_r, fog_g, fog_b, alpha);
+                                olivec_blend_color(&OLIVEC_PIXEL(oc, x, y), fog_color);
                             }
                         }
                     }
@@ -315,14 +346,22 @@ void game_update(void)
     for (size_t i = 0; i < ARRAY_LEN(cam_ctrl); ++i) {
         if (controls.keyboard[cam_ctrl[i].key]) {
             cam_vel = vector3_add(cam_vel, cam_ctrl[i].vector);
-            renderer.cam_yaw += cam_ctrl[i].angle * DELTA_TIME;
+            renderer.cam_yaw += cam_ctrl[i].angle_yaw * DELTA_TIME * 2;
+            renderer.cam_pit += cam_ctrl[i].angle_pit * DELTA_TIME; 
         }
     }
 
-#define MOUSE_SENSITIVITY 0.003f   // 可调整
+#define MOUSE_SENSITIVITY 0.003f
     renderer.cam_yaw += controls.mouse_dx * MOUSE_SENSITIVITY;
-    controls.mouse_dx = 0;   // 消费后清零
-    controls.mouse_dy = 0;   // 同样清零
+    renderer.cam_pit += controls.mouse_dy * MOUSE_SENSITIVITY;
+
+    const float max_pitch = 89.9*M_PI/180;
+    if (renderer.cam_pit > max_pitch) renderer.cam_pit = max_pitch;
+    if (renderer.cam_pit < -max_pitch) renderer.cam_pit = -max_pitch;
+
+    controls.mouse_dx = 0;
+    controls.mouse_dy = 0;
+
 
     Vector3 world_vel = vector3_add(
         vector3_add(

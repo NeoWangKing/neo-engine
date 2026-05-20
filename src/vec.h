@@ -144,6 +144,7 @@ static inline float ilerp(float a, float b, float c)
 
 static inline float vector2_ilerp(Vector2 a, Vector2 b, Vector2 c)
 {
+    if (vector2_dist(a, b) == 0.0f) return 0.0f;
     return vector2_dist(a,c) / vector2_dist(a,b);
 }
 
