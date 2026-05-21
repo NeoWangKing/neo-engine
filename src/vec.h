@@ -56,11 +56,25 @@ static inline Vector2 project_2d_scr(Vector2 v2, int width, int height)
     return make_vector2((v2.x + 1)/2*width, (1 - (v2.y + 1)/2)*height);
 }
 
+static inline Vector3 rotate_x(Vector3 p, float delta_angle)
+{
+    float angle = atan2f(p.y, p.z) + delta_angle;
+    float mag = sqrtf(p.y*p.y + p.z*p.z);
+    return make_vector3(p.x, sinf(angle)*mag, cosf(angle)*mag);
+}
+
 static inline Vector3 rotate_y(Vector3 p, float delta_angle)
 {
     float angle = atan2f(p.z, p.x) + delta_angle;
     float mag = sqrtf(p.x*p.x + p.z*p.z);
     return make_vector3(cosf(angle)*mag, p.y, sinf(angle)*mag);
+}
+
+static inline Vector3 rotate_z(Vector3 p, float delta_angle)
+{
+    float angle = atan2f(p.x, p.y) + delta_angle;
+    float mag = sqrtf(p.x*p.x + p.y*p.y);
+    return make_vector3(sinf(angle)*mag, cosf(angle)*mag, p.z);
 }
 
 typedef enum {

@@ -14,8 +14,8 @@
 #define NOB_STRIP_PREFIX
 #include "nob.h"
 
-#define NVC_AA_RES 1
-#include "neovin.c"
+#define OLIVEC_IMPLEMENTATION
+#include "olive.c"
 
 int main(void)
 {
@@ -155,13 +155,6 @@ int main(void)
 
         game_update();
 
-        NVC_Canvas nvc_oc = {
-            .pixels = (uint32_t*)game.display,
-            .width = game.display_width,
-            .height = game.display_height,
-            .stride = game.display_width,
-        };
-
         uint64_t end = nanos_since_unspecified_epoch();
 
         uint64_t delta = end - begin;
@@ -179,8 +172,15 @@ int main(void)
         delta = end - begin;
         int FPS = 1.0/((double)delta/NANOS_PER_SEC);
 
-        float font_size = 24;
-        NVC_Text(nvc_oc, temp_sprintf("FPS = %d", FPS), Vec2D(10,10), NVC_default_font, font_size, 0xFFAAAAFF);
+        Olivec_Canvas oc = {
+            .pixels = (uint32_t*)game.display,
+            .width = game.display_width,
+            .height = game.display_height,
+            .stride = game.display_width,
+        };
+
+        float font_size = 3;
+        olivec_text(oc, temp_sprintf("FPS = %d", FPS), 10, 10, olivec_default_font, font_size, 0xFFAAAAFF);
 
         XPutImage(display, window, gc, image, 0, 0, 0, 0, game.display_width, game.display_height);
         error = 0;
