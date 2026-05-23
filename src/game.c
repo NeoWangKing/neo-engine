@@ -284,7 +284,7 @@ static void renderer_push_model3d(Vector3 model_pos, float model_angle, float mo
 
         Vector3 to_camera = vector3_norm(vector3_sub(renderer.cam_pos, center));
 
-        if (vector3_dot(face_normal, to_camera) < 0) continue;
+        // if (vector3_dot(face_normal, to_camera) < 0) continue;
 
         renderer_push_triangle(v1, v2, v3, c1, c2, c3);
     }
@@ -381,13 +381,14 @@ void game_update(void)
     float speed = 3.0f;
     renderer.cam_pos = vector3_add(renderer.cam_pos, vector3_scale(world_vel, speed * DELTA_TIME));
 
+    const float max_pitch = 89.9*M_PI/180;
+    if (renderer.cam_pit > max_pitch) renderer.cam_pit = max_pitch;
+    if (renderer.cam_pit < -max_pitch) renderer.cam_pit = -max_pitch;
+
     // #define MOUSE_SENSITIVITY 0.003f
     //     renderer.cam_yaw += controls.mouse_dx * MOUSE_SENSITIVITY;
     //     renderer.cam_pit += controls.mouse_dy * MOUSE_SENSITIVITY;
     //
-    //     const float max_pitch = 89.9*M_PI/180;
-    //     if (renderer.cam_pit > max_pitch) renderer.cam_pit = max_pitch;
-    //     if (renderer.cam_pit < -max_pitch) renderer.cam_pit = -max_pitch;
     //
     //     controls.mouse_dx = 0;
     //     controls.mouse_dy = 0;

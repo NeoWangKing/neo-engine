@@ -1,8 +1,11 @@
+#include <complex.h>
 #define NOB_IMPLEMENTATION
 #include "include/nob.h"
 
-#define BUILD_FOLDER "build/"
-#define SRC_FOLDER   "src/"
+#define BUILD_FOLDER     "./build/"
+#define SRC_FOLDER       "./src/"
+#define INCLUDE_FOLDER       "./include/"
+#define SRC_BUILD_FOLDER "./src_build/"
 
 #ifdef __APPLE__
 void cmd_cflags_x11(Nob_Cmd *cmd)
@@ -88,53 +91,108 @@ void cmd_framework(Nob_Cmd *cmd)
 
 #endif
 
-void cmd_build(Nob_Cmd *cmd)
+void compile_common(Nob_Cmd *cmd)
 {
-    cmd_append(cmd, "-o", BUILD_FOLDER"main");
+    cmd_append(cmd, "clang");
+    cmd_append(cmd, "-Wall", "-Wextra", "-ggdb");
+    cmd_append(cmd, "-Iinclude");
+    cmd_append(cmd, "-O3");
+    cmd_append(cmd, "-Wno-tautological-compare");
+    cmd_append(cmd, "-Wno-unused-variable");
+    cmd_append(cmd, "-march=native");
 }
 
-void cmd_src(Nob_Cmd *cmd)
+bool rebuild_includes(Nob_Cmd *cmd, Nob_Procs *procs)
 {
-    cmd_append(cmd, SRC_FOLDER"main.c");
-    cmd_append(cmd, SRC_FOLDER"game.c");
+    static struct {
+        const char *input;
+        const char *output;
+        const char *macro;
+    } stb_headers[] = {
+        {
+            .input = INCLUDE_FOLDER"stb_truetype.h",
+            .output = BUILD_FOLDER"stb_truetype.o",
+            .macro = "-DSTB_TRUETYPE_IMPLEMENTATION",
+        },
+        {
+            .input = INCLUDE_FOLDER"stb_image_write.h",
+            .output = BUILD_FOLDER"stb_image_write.o",
+            .macro = "-DSTB_IMAGE_WRITE_IMPLEMENTATION",
+        },
+        {
+            .input = INCLUDE_FOLDER"stb_vorbis.c",
+            .output = BUILD_FOLDER"stb_vorbis.o",
+        },
+    };
+
+    for (size_t i = 0; i < ARRAY_LEN(stb_headers); ++i) {
+        int rebuild = nob_needs_rebuild1(stb_headers[i].output, stb_headers[i].input);
+        if (rebuild < 0) return false;
+        if (rebuild){
+            compile_common(cmd);
+            cmd_append(cmd, "-o", stb_headers[i].output);
+            cmd_append(cmd, "-x", "c");
+            cmd_append(cmd, "-c");
+            if (stb_headers[i].macro) cmd_append(cmd, stb_headers[i].macro);
+            cmd_append(cmd, stb_headers[i].input);
+            if (!nob_cmd_run(cmd, .async = procs)) return false;
+        } else {
+            nob_log(INFO, "%s up to data", stb_headers[i].output);
+        }
+    }
+
+    if (!procs_flush(procs)) return false;
+
+    return true;
 }
+
+static Nob_Cmd cmd = {0};
+static Nob_Procs procs = {0};
 
 int main(int argc, char **argv) {
     NOB_GO_REBUILD_URSELF(argc, argv);
 
-    Nob_Cmd cmd = {0};
-    cmd_append(&cmd, "clang");
-    cmd_append(&cmd, "-Wall", "-Wextra", "-g");
+    if (!mkdir_if_not_exists(BUILD_FOLDER)) return 1;
 
-    cmd_append(&cmd, "-Iinclude");
+    if (!rebuild_includes(&cmd, &procs)) return 1;
+
+    // exit(69);
+
+    // ttf2c compile
+    compile_common(&cmd);
+    cmd_append(&cmd, "-o", BUILD_FOLDER"ttf2c");
+    cmd_append(&cmd, SRC_BUILD_FOLDER"ttf2c.c");
+    cmd_append(&cmd, BUILD_FOLDER"stb_truetype.o");
+    cmd_append(&cmd, BUILD_FOLDER"stb_image_write.o");
+    cmd_append(&cmd, "-lm");
+    if (!nob_cmd_run(&cmd)) return 1;
+    nob_log(NOB_INFO, "Compliled: ./build/ttf2c");
+
+    // ttf2c run
+    cmd_append(&cmd, BUILD_FOLDER"ttf2c");
+    nob_log(NOB_INFO, "Running: ./build/ttf2c");
+    if (!nob_cmd_run(&cmd)) return 1;
+    nob_log(NOB_INFO, "Ran: ./build/ttf2c");
+
+    // main compile
+    compile_common(&cmd);
     cmd_cflags_x11(&cmd);
     cmd_cflags_pa(&cmd);
-
-    cmd_append(&cmd, "-O3");
-    cmd_append(&cmd, "-march=native");
-    cmd_build(&cmd);
-    cmd_src(&cmd);
-
+    cmd_append(&cmd, "-o", BUILD_FOLDER"main");
+    cmd_append(&cmd, SRC_FOLDER"main.c");
+    cmd_append(&cmd, SRC_FOLDER"game.c");
     cmd_libs_x11(&cmd);
     cmd_libs_pa(&cmd);
     cmd_append(&cmd, "-lm");
     cmd_framework(&cmd);
+    if (!nob_cmd_run(&cmd)) return 1;
+    nob_log(NOB_INFO, "Compliled: ./build/main");
 
-    if (!nob_cmd_run_sync(cmd)) {
-        nob_log(NOB_ERROR, "编译失败！");
-        return 1;
-    }
-    nob_log(NOB_INFO, "编译成功 → ./build/main");
-
-    // cmd = (Nob_Cmd){0};
-    //
+    // // main run
     // cmd_append(&cmd, "./build/main");
-    //
-    // if (!nob_cmd_run_sync(cmd)) {
-    //     nob_log(NOB_ERROR, "运行失败！");
-    //     return 1;
-    // }
-    // nob_log(NOB_INFO, "运行成功： ./build/main");
+    // nob_log(NOB_INFO, "Running: ./build/main");
+    // if (!nob_cmd_run(&cmd)) return 1;
+    // nob_log(NOB_INFO, "Ran: ./build/main");
 
     return 0;
 }
