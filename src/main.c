@@ -155,37 +155,18 @@ int main(void)
 
         game_update();
 
-        uint64_t end = nanos_since_unspecified_epoch();
-
-        uint64_t delta = end - begin;
-
-        if (delta < delta_time) {
-            struct timespec ts = {
-                .tv_sec = 0,
-                .tv_nsec = (delta_time - delta),
-            };
-            nanosleep(&ts, NULL);
-        }
-
-        end = nanos_since_unspecified_epoch();
-
-        delta = end - begin;
-        int FPS = 1.0/((double)delta/NANOS_PER_SEC);
-
-        Olivec_Canvas oc = {
-            .pixels = (uint32_t*)game.display,
-            .width = game.display_width,
-            .height = game.display_height,
-            .stride = game.display_width,
-        };
-
-        float font_size = 3;
-        olivec_text(oc, temp_sprintf("FPS = %d", FPS), 10, 10, olivec_default_font, font_size, 0xFFAAAAFF);
-
         XPutImage(display, window, gc, image, 0, 0, 0, 0, game.display_width, game.display_height);
         error = 0;
         size_t audio_size_in_bytes = game.audio_sample_rate/game.target_fps*game.audio_channels*sizeof(*game.audio);
         pa_simple_write(s, game.audio, audio_size_in_bytes, &error);
+
+        uint64_t end = nanos_since_unspecified_epoch();
+        uint64_t delta = end - begin;
+
+        if (delta < delta_time) {
+            struct timespec ts = { .tv_sec = 0, .tv_nsec = (delta_time - delta), };
+            nanosleep(&ts, NULL);
+        }
     }
 
     return 0;

@@ -2,6 +2,7 @@
 #define NOB_IMPLEMENTATION
 #include "include/nob.h"
 
+#define ASSETS_FOLDER "./assets/"
 #define BUILD_FOLDER     "./build/"
 #define SRC_FOLDER       "./src/"
 #define INCLUDE_FOLDER       "./include/"
@@ -95,7 +96,8 @@ void compile_common(Nob_Cmd *cmd)
 {
     cmd_append(cmd, "clang");
     cmd_append(cmd, "-Wall", "-Wextra", "-ggdb");
-    cmd_append(cmd, "-Iinclude");
+    cmd_append(cmd, "-I"INCLUDE_FOLDER);
+    cmd_append(cmd, "-I"BUILD_FOLDER);
     cmd_append(cmd, "-O3");
     cmd_append(cmd, "-Wno-tautological-compare");
     cmd_append(cmd, "-Wno-unused-variable");
@@ -118,6 +120,11 @@ bool rebuild_includes(Nob_Cmd *cmd, Nob_Procs *procs)
             .input = INCLUDE_FOLDER"stb_image_write.h",
             .output = BUILD_FOLDER"stb_image_write.o",
             .macro = "-DSTB_IMAGE_WRITE_IMPLEMENTATION",
+        },
+        {
+            .input = INCLUDE_FOLDER"flag.h",
+            .output = BUILD_FOLDER"flag.o",
+            .macro = "-DFLAG_IMPLEMENTATION",
         },
         {
             .input = INCLUDE_FOLDER"stb_vorbis.c",
@@ -153,6 +160,7 @@ int main(int argc, char **argv) {
     NOB_GO_REBUILD_URSELF(argc, argv);
 
     if (!mkdir_if_not_exists(BUILD_FOLDER)) return 1;
+    if (!mkdir_if_not_exists(BUILD_FOLDER"fonts/")) return 1;
 
     if (!rebuild_includes(&cmd, &procs)) return 1;
 
@@ -164,12 +172,16 @@ int main(int argc, char **argv) {
     cmd_append(&cmd, SRC_BUILD_FOLDER"ttf2c.c");
     cmd_append(&cmd, BUILD_FOLDER"stb_truetype.o");
     cmd_append(&cmd, BUILD_FOLDER"stb_image_write.o");
+    cmd_append(&cmd, BUILD_FOLDER"flag.o");
     cmd_append(&cmd, "-lm");
     if (!nob_cmd_run(&cmd)) return 1;
     nob_log(NOB_INFO, "Compliled: ./build/ttf2c");
 
     // ttf2c run
     cmd_append(&cmd, BUILD_FOLDER"ttf2c");
+    cmd_append(&cmd, "-i", ASSETS_FOLDER"fonts/JetBrainsMonoNerdFont-Regular.ttf");
+    cmd_append(&cmd, "-o", BUILD_FOLDER"fonts/JetBrainsMonoNerdFont_Regular.h");
+    cmd_append(&cmd, "-n", "jetbrainsmono_regular");
     nob_log(NOB_INFO, "Running: ./build/ttf2c");
     if (!nob_cmd_run(&cmd)) return 1;
     nob_log(NOB_INFO, "Ran: ./build/ttf2c");
