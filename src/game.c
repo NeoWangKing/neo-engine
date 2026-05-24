@@ -376,11 +376,11 @@ void game_jetbrainsmono_text(const char *message, float pen_x, float pen_y, Colo
 {
     int n = strlen(message);
     for (int i = 0; i < n; ++i) {
-        int index = message[i] - jetbrainsmono_regular_first_char;
-        stbtt_bakedchar cdata = jetbrainsmono_regular_cdata[index];
+        int index = message[i] - JetBrainsMonoNerdFont_Regular_first_char;
+        stbtt_bakedchar cdata = JetBrainsMonoNerdFont_Regular_cdata[index];
         for (int dy = cdata.y0; dy < cdata.y1; ++dy) {
             for (int dx = cdata.x0; dx < cdata.x1; ++dx) {
-                unsigned char intensity = jetbrainsmono_regular_pixels[dy*jetbrainsmono_regular_width + dx];
+                unsigned char intensity = JetBrainsMonoNerdFont_Regular_pixels[dy*JetBrainsMonoNerdFont_Regular_width + dx];
                 int x = pen_x + dx - cdata.x0 + cdata.xoff;
                 int y = pen_y + dy - cdata.y0 + cdata.yoff;
                 if (0 <= x && x < DISPLAY_WIDTH && 0 <= y && y < DISPLAY_HEIGHT) {
