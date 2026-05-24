@@ -13,7 +13,7 @@
 #include "stb_vorbis.c"
 #include "stb_truetype.h"
 #include "models/utahTeapot.h"
-// #include "../assets/model3d/Amiya1.c"
+// #include "models/amiya1.h"
 #include "fonts/JetBrainsMonoNerdFont_Regular.h"
 
 #define TARGET_FPS 60
@@ -320,21 +320,21 @@ static void renderer_end(void)
     }
 }
 
-static void renderer_push_utahTeapot(Vector3 model_pos, float model_rot, float model_scale)
+static void renderer_push_utahteapot(Vector3 teapot_pos, float teapot_rot, float teapot_scale)
 {
-    for (size_t i = 0; i < utahTeapot_faces_count; ++i) {
-        int a = utahTeapot_faces[i][FACE_V1];
-        int b = utahTeapot_faces[i][FACE_V2];
-        int c = utahTeapot_faces[i][FACE_V3];
-        Vector3 v1 = rotate_y(make_vector3(utahTeapot_vertices[a][0], utahTeapot_vertices[a][1], utahTeapot_vertices[a][2]), model_rot);
-        Vector3 v2 = rotate_y(make_vector3(utahTeapot_vertices[b][0], utahTeapot_vertices[b][1], utahTeapot_vertices[b][2]), model_rot);
-        Vector3 v3 = rotate_y(make_vector3(utahTeapot_vertices[c][0], utahTeapot_vertices[c][1], utahTeapot_vertices[c][2]), model_rot);
-        v1 = vector3_scale(v1, model_scale);
-        v2 = vector3_scale(v2, model_scale);
-        v3 = vector3_scale(v3, model_scale);
-        v1 = vector3_add(v1, model_pos);
-        v2 = vector3_add(v2, model_pos);
-        v3 = vector3_add(v3, model_pos);
+    for (size_t i = 0; i < utahteapot_faces_count; ++i) {
+        int a = utahteapot_faces[i][FACE_V1];
+        int b = utahteapot_faces[i][FACE_V2];
+        int c = utahteapot_faces[i][FACE_V3];
+        Vector3 v1 = rotate_y(make_vector3(utahteapot_vertices[a][0], utahteapot_vertices[a][1], utahteapot_vertices[a][2]), teapot_rot);
+        Vector3 v2 = rotate_y(make_vector3(utahteapot_vertices[b][0], utahteapot_vertices[b][1], utahteapot_vertices[b][2]), teapot_rot);
+        Vector3 v3 = rotate_y(make_vector3(utahteapot_vertices[c][0], utahteapot_vertices[c][1], utahteapot_vertices[c][2]), teapot_rot);
+        v1 = vector3_scale(v1, teapot_scale);
+        v2 = vector3_scale(v2, teapot_scale);
+        v3 = vector3_scale(v3, teapot_scale);
+        v1 = vector3_add(v1, teapot_pos);
+        v2 = vector3_add(v2, teapot_pos);
+        v3 = vector3_add(v3, teapot_pos);
         // Color c1 = { .r = 100, .g = 100, .b = 100, .a = 255 };
         // Color c2 = { .r = 100, .g = 100, .b = 100, .a = 255 };
         // Color c3 = { .r = 100, .g = 100, .b = 100, .a = 255 };
@@ -345,6 +345,32 @@ static void renderer_push_utahTeapot(Vector3 model_pos, float model_rot, float m
         renderer_push_triangle(v1, v2, v3, c1, c2, c3);
     }
 }
+
+// static void renderer_push_amiya(Vector3 amiya_pos, float amiya_rot, float amiya_scale)
+// {
+//     for (size_t i = 0; i < amiya1_faces_count; ++i) {
+//         int a = amiya1_faces[i][FACE_V1];
+//         int b = amiya1_faces[i][FACE_V2];
+//         int c = amiya1_faces[i][FACE_V3];
+//         Vector3 v1 = rotate_y(make_vector3(amiya1_vertices[a][0], amiya1_vertices[a][1], amiya1_vertices[a][2]), amiya_rot);
+//         Vector3 v2 = rotate_y(make_vector3(amiya1_vertices[b][0], amiya1_vertices[b][1], amiya1_vertices[b][2]), amiya_rot);
+//         Vector3 v3 = rotate_y(make_vector3(amiya1_vertices[c][0], amiya1_vertices[c][1], amiya1_vertices[c][2]), amiya_rot);
+//         v1 = vector3_scale(v1, amiya_scale);
+//         v2 = vector3_scale(v2, amiya_scale);
+//         v3 = vector3_scale(v3, amiya_scale);
+//         v1 = vector3_add(v1, amiya_pos);
+//         v2 = vector3_add(v2, amiya_pos);
+//         v3 = vector3_add(v3, amiya_pos);
+//         // Color c1 = { .r = 100, .g = 100, .b = 100, .a = 255 };
+//         // Color c2 = { .r = 100, .g = 100, .b = 100, .a = 255 };
+//         // Color c3 = { .r = 100, .g = 100, .b = 100, .a = 255 };
+//         Color c1 = { .r = 176, .g = 176, .b = 255, .a = 255 };
+//         Color c2 = { .r = 176, .g = 176, .b = 255, .a = 255 };
+//         Color c3 = { .r = 176, .g = 176, .b = 255, .a = 255 };
+//
+//         renderer_push_triangle(v1, v2, v3, c1, c2, c3);
+//     }
+// }
 
 static void renderer_push_floor(float floor_height, float grid_size)
 {
@@ -486,10 +512,17 @@ void game_update(void)
     renderer_begin();
     {
         // Model
-        Vector3 model_pos = {0, 1, 0};
-        float model_angle = angle;
-        float model_scale = 0.5f;
-        renderer_push_utahTeapot(model_pos, model_angle, model_scale);
+        // utahTeapot
+        Vector3 teapot_pos = {0, 1, 0};
+        float teapot_angle = angle;
+        float teapot_scale = 0.5f;
+        renderer_push_utahteapot(teapot_pos, teapot_angle, teapot_scale);
+
+        // amiya1
+        // Vector3 amiya_pos = {0, 1, 0};
+        // float amiya_angle = angle;
+        // float amiya_scale = 0.1f;
+        // renderer_push_amiya(amiya_pos, amiya_angle, amiya_scale);
 
         // Floor
         float floor_height = 0.0f;

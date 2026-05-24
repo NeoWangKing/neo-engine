@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <ctype.h>
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
 #include <float.h>
 #include <limits.h>
@@ -98,10 +100,34 @@ bool is_deleted_face(Vertices vertices, Face face, Component_Indices delete_comp
     return false;
 }
 
+char *uppercase(const char *str)
+{
+    char *upper = (char *)str;
+    int i = 0;
+    while (str[i]) {
+        upper[i] = toupper((unsigned char)str[i]);
+        i++;
+    }
+    return upper;
+}
+
+char *lowercase(const char *str)
+{
+    char *upper = (char *)str;
+    int i = 0;
+    while (str[i]) {
+        upper[i] = tolower((unsigned char)str[i]);
+        i++;
+    }
+    return upper;
+}
+
 void generate_code(FILE *out, Vertices vertices, TexCoords texcoords, Normals normals, Faces faces, Component_Indices delete_components, const char *name)
 {
-    fprintf(out, "#ifndef OBJ_H_\n");
-    fprintf(out, "#define OBJ_H_\n");
+    uppercase(name);
+    fprintf(out, "#ifndef OBJ_%s_H_\n", name);
+    fprintf(out, "#define OBJ_%s_H_\n", name);
+    lowercase(name);
     fprintf(out, "#define %s_vertices_count %zu\n", name, vertices.count);
     if (vertices.count == 0) {
         fprintf(out, "static const float %s_vertices[1][3] = {0};\n", name);
@@ -158,7 +184,9 @@ void generate_code(FILE *out, Vertices vertices, TexCoords texcoords, Normals no
         }
         fprintf(out, "};\n");
     }
-    fprintf(out, "#endif // OBJ_H_\n");
+    uppercase(name);
+    fprintf(out, "#endif // OBJ_%s_H_\n", name);
+    lowercase(name);
 }
 
 Vector3 remap_object(Vector3 v, float scale, float lx, float hx, float ly, float hy, float lz, float hz)
