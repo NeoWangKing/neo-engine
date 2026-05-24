@@ -12,7 +12,7 @@
 #include "game.h"
 #include "stb_vorbis.c"
 #include "stb_truetype.h"
-#include "../assets/model3d/utahTeapot.c"
+#include "models/utahTeapot.h"
 // #include "../assets/model3d/Amiya1.c"
 #include "fonts/JetBrainsMonoNerdFont_Regular.h"
 
@@ -320,15 +320,15 @@ static void renderer_end(void)
     }
 }
 
-static void renderer_push_model3d(Vector3 model_pos, float model_rot, float model_scale)
+static void renderer_push_utahTeapot(Vector3 model_pos, float model_rot, float model_scale)
 {
-    for (size_t i = 0; i < faces_count; ++i) {
-        int a = faces[i][FACE_V1];
-        int b = faces[i][FACE_V2];
-        int c = faces[i][FACE_V3];
-        Vector3 v1 = rotate_y(make_vector3(vertices[a][0], vertices[a][1], vertices[a][2]), model_rot);
-        Vector3 v2 = rotate_y(make_vector3(vertices[b][0], vertices[b][1], vertices[b][2]), model_rot);
-        Vector3 v3 = rotate_y(make_vector3(vertices[c][0], vertices[c][1], vertices[c][2]), model_rot);
+    for (size_t i = 0; i < utahTeapot_faces_count; ++i) {
+        int a = utahTeapot_faces[i][FACE_V1];
+        int b = utahTeapot_faces[i][FACE_V2];
+        int c = utahTeapot_faces[i][FACE_V3];
+        Vector3 v1 = rotate_y(make_vector3(utahTeapot_vertices[a][0], utahTeapot_vertices[a][1], utahTeapot_vertices[a][2]), model_rot);
+        Vector3 v2 = rotate_y(make_vector3(utahTeapot_vertices[b][0], utahTeapot_vertices[b][1], utahTeapot_vertices[b][2]), model_rot);
+        Vector3 v3 = rotate_y(make_vector3(utahTeapot_vertices[c][0], utahTeapot_vertices[c][1], utahTeapot_vertices[c][2]), model_rot);
         v1 = vector3_scale(v1, model_scale);
         v2 = vector3_scale(v2, model_scale);
         v3 = vector3_scale(v3, model_scale);
@@ -488,8 +488,8 @@ void game_update(void)
         // Model
         Vector3 model_pos = {0, 1, 0};
         float model_angle = angle;
-        float model_scale = 1.0f;
-        renderer_push_model3d(model_pos, model_angle, model_scale);
+        float model_scale = 0.5f;
+        renderer_push_utahTeapot(model_pos, model_angle, model_scale);
 
         // Floor
         float floor_height = 0.0f;

@@ -7,8 +7,6 @@
 #include "stb_image_write.h"
 #include "flag.h"
 
-// #include "JetBrainsMonoNerdFont_Regular.h"
-
 String_Builder sb = {0};
 
 #define WIDTH 512
