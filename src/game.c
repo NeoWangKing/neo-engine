@@ -42,6 +42,13 @@ static_assert(AUDIO_SAMPLE_RATE%TARGET_FPS == 0, "Sample rate must be divisible 
 #define KEY_CTRL_R XK_Control_R
 
 static Controls controls = {0};
+static stb_vorbis *ogg = NULL;
+static int mouse_x = DISPLAY_WIDTH/2;
+static int mouse_y = DISPLAY_HEIGHT/2;
+static float fog_distance = 0;
+static float fog_fader = 0;
+static bool show_fog = true;
+static bool back_culting = true;
 
 typedef struct {
     uint8_t b, g, r, a;
@@ -69,30 +76,33 @@ static int16_t audio[AUDIO_CAPACITY];
 
 static struct {
     int key;
-    Vector3 vector;
+    Vector3 vel;
+    Vector3 acc;
     float angle_yaw;
     float angle_pit;
 } cam_ctrl[] = {
-    { .key = 'w',       .vector = { 0.0f,  0.0f,  1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 's',       .vector = { 0.0f,  0.0f, -1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 'a',       .vector = {-1.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 'd',       .vector = { 1.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = ' ',       .vector = { 0.0f,  1.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = KEY_CTRL_L,.vector = { 0.0f, -1.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 'q',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw =  1.0f, .angle_pit =  0.0f},
-    { .key = 'e',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw = -1.0f, .angle_pit =  0.0f},
-    { .key = 'r',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit =  1.0f },
-    { .key = 'f',       .vector = { 0.0f,  0.0f,  0.0f}, .angle_yaw =  0.0f, .angle_pit = -1.0f },
+    { .key = 'w',       .vel = { 0.0f, 0.0f, 1.0f}, .acc = { 0.0f, 0.0f, 1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 's',       .vel = { 0.0f, 0.0f,-1.0f}, .acc = { 0.0f, 0.0f,-1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 'a',       .vel = {-1.0f, 0.0f, 0.0f}, .acc = {-1.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 'd',       .vel = { 1.0f, 0.0f, 0.0f}, .acc = { 1.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = ' ',       .vel = { 0.0f, 1.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = KEY_CTRL_L,.vel = { 0.0f,-1.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
+    { .key = 'q',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  1.0f, .angle_pit =  0.0f},
+    { .key = 'e',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw = -1.0f, .angle_pit =  0.0f},
+    { .key = 'r',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  1.0f },
+    { .key = 'f',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit = -1.0f },
 };
 
 static struct {
     Vector3s vertices;
     Colors   colors;
     Vector3  cam_pos;
+    Vector3  cam_vel;
     float    cam_yaw;
     float    cam_pit;
 } renderer = {
-    .cam_pos = {0.0f, 1.0f, -2.0f},
+    .cam_pos = {0.0f, 2.0f, -2.0f},
+    .cam_vel = {0.0f, 0.0f, 0.0f},
     .cam_yaw = 0.0f,
     .cam_pit = 0.0f,
 };
@@ -129,20 +139,9 @@ static inline void renderer_push_triangle(Vector3 v1, Vector3 v2, Vector3 v3, Co
     Color   c[3] = { c1, c2, c3 };
 
     Vector3 face_normal = vector3_norm(vector3_cross(vector3_sub(v2, v1), vector3_sub(v3, v1)));
-
-    Vector3 center = make_vector3(
-            (v1.x + v2.x + v3.x) / 3.0f,
-            (v1.y + v2.y + v3.y) / 3.0f,
-            (v1.z + v2.z + v3.z) / 3.0f
-            );
-
-    Vector3 v1_to_camera = vector3_norm(vector3_sub(renderer.cam_pos, v1));
-    Vector3 v2_to_camera = vector3_norm(vector3_sub(renderer.cam_pos, v2));
-    Vector3 v3_to_camera = vector3_norm(vector3_sub(renderer.cam_pos, v3));
-
-    if (vector3_dot(face_normal, v1_to_camera) < 0 &&
-            vector3_dot(face_normal, v2_to_camera) < 0 &&
-            vector3_dot(face_normal, v3_to_camera) < 0 ) return;
+    Vector3 center = make_vector3( (v1.x + v2.x + v3.x) / 3.0f, (v1.y + v2.y + v3.y) / 3.0f, (v1.z + v2.z + v3.z) / 3.0f);
+    Vector3 center_to_camera = vector3_norm(vector3_sub(renderer.cam_pos, center));
+    if (back_culting && vector3_dot(face_normal, center_to_camera) < 0) return;
 
     Vector3 world_up = make_vector3(0.0f, 1.0f, 0.0f);
     Vector3 forward = make_vector3(cosf(renderer.cam_pit)*sinf(renderer.cam_yaw), sinf(renderer.cam_pit), cosf(renderer.cam_pit)*cosf(renderer.cam_yaw));
@@ -252,7 +251,7 @@ static void renderer_end(void)
                             OLIVEC_PIXEL(oc, x, y) = *(uint32_t*)&c;;
 
                             // The Fog
-                            if (1) {
+                            if (show_fog) {
                                 float z = 1.0f / rz;
                                 float t = (z - NEAR_CLIP) / (FAR_CLIP - NEAR_CLIP);
                                 if (t < 0.0f) t = 0.0f;
@@ -390,8 +389,6 @@ void game_jetbrainsmono_text(const char *message, float pen_x, float pen_y, Colo
     }
 }
 
-static stb_vorbis *ogg = NULL;
-
 Game game_init(void)
 {
     ogg = stb_vorbis_open_filename("assets/sounds/blast.ogg", NULL, NULL);
@@ -420,41 +417,85 @@ void game_update(void)
     uint64_t perf_begin = nanos_since_unspecified_epoch();
 
     // Logic
-    Vector3 world_forward = make_vector3(sinf(renderer.cam_yaw), 0, cosf(renderer.cam_yaw));
-    Vector3 world_up = make_vector3(0.0f, 1.0f, 0.0f);
-    Vector3 forward = make_vector3(cosf(renderer.cam_pit)*sinf(renderer.cam_yaw), sinf(renderer.cam_pit), cosf(renderer.cam_pit)*cosf(renderer.cam_yaw));
-    Vector3 right = vector3_norm(vector3_cross(forward, world_up));
-    Vector3 up = vector3_cross(right, forward);
+    float cam_height = 1.60f;
+    float cam_h_acc = 25.0f;
+    float cam_ground_f = 10.0f;
+    float cam_ground_vf = 0.5f;
+    float cam_air_vf = 0.0f;
+    float gravity = -9.8f;
+    float jump_vel = 5.0f;
 
-    Vector3 cam_vel = {0, 0, 0};
-    for (size_t i = 0; i < ARRAY_LEN(cam_ctrl); ++i) {
-        if (controls.keyboard[cam_ctrl[i].key]) {
-            cam_vel = vector3_add(cam_vel, cam_ctrl[i].vector);
-            renderer.cam_yaw += cam_ctrl[i].angle_yaw * DELTA_TIME * 2;
-            renderer.cam_pit += cam_ctrl[i].angle_pit * DELTA_TIME; 
-        }
+    Vector3 cam_forward = { sinf(renderer.cam_yaw), 0, cosf(renderer.cam_yaw) };
+    Vector3 cam_right   = {-cosf(renderer.cam_yaw), 0, sinf(renderer.cam_yaw) };
+    
+    bool on_ground = (renderer.cam_pos.y <= cam_height);
+
+    Vector3 move_h_acc = {0,0,0};
+    if (controls.keyboard['w']) move_h_acc = vector3_add(move_h_acc, cam_forward);
+    if (controls.keyboard['s']) move_h_acc = vector3_sub(move_h_acc, cam_forward);
+    if (controls.keyboard['a']) move_h_acc = vector3_sub(move_h_acc, cam_right);
+    if (controls.keyboard['d']) move_h_acc = vector3_add(move_h_acc, cam_right);
+    if (vector3_len(move_h_acc) > 0) move_h_acc = vector3_norm(move_h_acc);
+    move_h_acc = on_ground ? vector3_scale(move_h_acc, cam_h_acc) : vector3_scale(move_h_acc, cam_h_acc*0.1);
+    float vel_xz = sqrtf(renderer.cam_vel.x*renderer.cam_vel.x + renderer.cam_vel.z*renderer.cam_vel.z);
+    float vf = on_ground ? cam_ground_vf : cam_air_vf;
+    move_h_acc.x -= vf * renderer.cam_vel.x * vel_xz;
+    move_h_acc.z -= vf * renderer.cam_vel.z * vel_xz;
+    float f = on_ground ? cam_ground_f : 0;
+    if (vel_xz > 1e-6f) {
+        move_h_acc.x -= f * renderer.cam_vel.x / vel_xz;
+        move_h_acc.z -= f * renderer.cam_vel.z / vel_xz;
     }
 
-    Vector3 world_vel = vector3_add(
-            vector3_add(
-                vector3_scale(right, cam_vel.x),
-                vector3_scale(world_up, cam_vel.y)),
-            vector3_scale(world_forward, cam_vel.z));
+    renderer.cam_vel.x += move_h_acc.x * DELTA_TIME;
+    renderer.cam_vel.z += move_h_acc.z * DELTA_TIME;
+    renderer.cam_vel.y += gravity * DELTA_TIME;
 
-    float speed = 5.0f;
-    renderer.cam_pos = vector3_add(renderer.cam_pos, vector3_scale(world_vel, speed * DELTA_TIME));
+    static bool jump_was_pressed = false;
+    if (controls.keyboard[' '] && on_ground && !jump_was_pressed) {
+        renderer.cam_vel.y = jump_vel;
+        jump_was_pressed = true;
+    } else if (!controls.keyboard[' ']) {
+        jump_was_pressed = false;
+    }
 
-    const float max_pitch = 89.9*M_PI/180;
-    if (renderer.cam_pit > max_pitch) renderer.cam_pit = max_pitch;
-    if (renderer.cam_pit < -max_pitch) renderer.cam_pit = -max_pitch;
+    renderer.cam_pos.x += renderer.cam_vel.x * DELTA_TIME;
+    renderer.cam_pos.y += renderer.cam_vel.y * DELTA_TIME;
+    renderer.cam_pos.z += renderer.cam_vel.z * DELTA_TIME;
 
-    // #define MOUSE_SENSITIVITY 0.003f
-    //     renderer.cam_yaw += controls.mouse_dx * MOUSE_SENSITIVITY;
-    //     renderer.cam_pit += controls.mouse_dy * MOUSE_SENSITIVITY;
-    //
-    //
-    //     controls.mouse_dx = 0;
-    //     controls.mouse_dy = 0;
+    if (renderer.cam_pos.y < cam_height) {
+        renderer.cam_pos.y = cam_height;
+        if (renderer.cam_vel.y < 0) renderer.cam_vel.y = 0;
+    }
+
+    if (controls.keyboard['q']) renderer.cam_yaw += 1.0f * DELTA_TIME;
+    if (controls.keyboard['e']) renderer.cam_yaw -= 1.0f * DELTA_TIME;
+    if (controls.keyboard['r']) renderer.cam_pit += 1.0f * DELTA_TIME;
+    if (controls.keyboard['f']) renderer.cam_pit -= 1.0f * DELTA_TIME;
+
+    const float MAX_PITCH = 89.9f * M_PI / 180.0f;
+    if (renderer.cam_pit >  MAX_PITCH) renderer.cam_pit =  MAX_PITCH;
+    if (renderer.cam_pit < -MAX_PITCH) renderer.cam_pit = -MAX_PITCH;
+
+    renderer.cam_yaw   += controls.mouse_dx * 0.003f;
+    renderer.cam_pit   += controls.mouse_dy * 0.003f;
+    controls.mouse_dx = 0;
+    controls.mouse_dy = 0;
+
+    static bool key_1_was_pressed = false;
+    if (controls.keyboard['1'] && !key_1_was_pressed) {
+        show_fog = !show_fog;
+        key_1_was_pressed = true;
+    } else if (!controls.keyboard['1']) {
+        key_1_was_pressed = false;
+    }
+    static bool key_2_was_pressed = false;
+    if (controls.keyboard['2'] && !key_2_was_pressed) {
+        back_culting = !back_culting;
+        key_2_was_pressed = true;
+    } else if (!controls.keyboard['2']) {
+        key_2_was_pressed = false;
+    }
 
     // Audio
     memset(audio, 0, sizeof(audio));
@@ -463,24 +504,11 @@ void game_update(void)
     // Display
     renderer_begin();
     {
-        // Model
         // utahTeapot
         Vector3 teapot_pos = {0, 1, 0};
         float teapot_angle_xz = angle;
         float teapot_scale = 0.5f;
         renderer_push_utahteapot(teapot_pos, teapot_angle_xz, teapot_scale);
-
-        // amiya1
-        // Vector3 amiya_pos = {0, 1, 0};
-        // float amiya_angle_xz = angle;
-        // float amiya_scale = 0.1f;
-        // renderer_push_amiya(amiya_pos, amiya_angle_xz, amiya_scale);
-
-        // weiweimei
-        // Vector3 weiweimei_pos = {0, 1, 0};
-        // float weiweimei_angle_xz = angle;
-        // float weiweimei_scale = 0.01f;
-        // renderer_push_weiweimei(weiweimei_pos, weiweimei_angle_xz, weiweimei_scale);
 
         // Floor
         float floor_height = 0.0f;
@@ -494,7 +522,10 @@ void game_update(void)
     uint64_t perf_end = nanos_since_unspecified_epoch();
     uint64_t delta = perf_end - perf_begin;
     int fps = 1.0/((double)delta/NANOS_PER_SEC);
-    game_jetbrainsmono_text(temp_sprintf("FPS: %3d, RES: %d x %d", fps, DISPLAY_WIDTH, DISPLAY_HEIGHT), 10, 50, COLOR_FOREGROUND);
+    game_jetbrainsmono_text(temp_sprintf("FPS: %3d", fps), 10, 25, COLOR_FOREGROUND);
+    game_jetbrainsmono_text(temp_sprintf("Pos: %5.2f,%5.2f,%5.2f", renderer.cam_pos.x, renderer.cam_pos.y-cam_height, renderer.cam_pos.z), 10, 50, COLOR_FOREGROUND);
+    game_jetbrainsmono_text(temp_sprintf("Vel: %5.2f,%5.2f,%5.2f", renderer.cam_vel.x, renderer.cam_vel.y, renderer.cam_vel.z), 10, 75, COLOR_FOREGROUND);
+    game_jetbrainsmono_text(temp_sprintf("Vxz: %5.2f", vel_xz), 10, 100, COLOR_FOREGROUND);
 }
 
 void game_key_up(int key)

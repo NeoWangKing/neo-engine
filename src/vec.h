@@ -89,6 +89,11 @@ typedef enum {
     FACE_VN3,
 } Face_Index;
 
+static inline float vector3_len(Vector3 v)
+{
+    return sqrtf(v.x*v.x + v.y*v.y + v.z*v.z);
+}
+
 static inline float vector3_dot(Vector3 a, Vector3 b)
 {
     return a.x*b.x + a.y*b.y + a.z*b.z;
@@ -121,6 +126,7 @@ static inline Vector3 vector3_cross(Vector3 a, Vector3 b)
 static inline Vector3 vector3_norm(Vector3 v)
 {
     float len = sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+    if (len == 1.0f) return v;
     if (len > 1e-6f) return vector3_scale(v, 1.0f/len);
     return make_vector3(0, 0, 1);
 }

@@ -17,6 +17,8 @@
 #define OLIVEC_IMPLEMENTATION
 #include "olive.c"
 
+static int warping = 0;
+
 int main(void)
 {
     Game game = game_init();
@@ -104,6 +106,10 @@ int main(void)
     XStoreName(display, window, "The Game");
     XMapWindow(display, window);
 
+    XDefineCursor(display, window, None);
+    XWarpPointer(display, None, window, 0, 0, 0, 0, game.display_width/2, game.display_height/2);
+    XGrabPointer(display, window, True, PointerMotionMask, GrabModeAsync, GrabModeAsync, window, None, CurrentTime);
+
     uint64_t delta_time = NANOS_PER_SEC/game.target_fps;
 
     bool quit = false;
@@ -137,6 +143,24 @@ int main(void)
 
                 case MotionNotify:
                     {
+                        // 如果是 warp 产生的移动，忽略
+                        if (warping) {
+                            warping = 0;
+                            break;
+                        }
+                        int x = event.xmotion.x;
+                        int y = event.xmotion.y;
+                        int cx = game.display_width / 2;
+                        int cy = game.display_height / 2;
+                        // 计算相对于窗口中心的偏移量
+                        int dx = x - cx;
+                        int dy = y - cy;
+                        // 存入 controls（注意 game.controls 是指针）
+                        game.controls->mouse_dx = dx;
+                        game.controls->mouse_dy = dy;
+                        // 将鼠标 warp 回窗口中心
+                        XWarpPointer(display, None, window, 0, 0, 0, 0, cx, cy);
+                        warping = 1;
                         break;
                     }
 
