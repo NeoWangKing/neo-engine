@@ -41,14 +41,37 @@ static_assert(AUDIO_SAMPLE_RATE%TARGET_FPS == 0, "Sample rate must be divisible 
 #define KEY_CTRL_L XK_Control_L
 #define KEY_CTRL_R XK_Control_R
 
+#define GAME_SCREEN_MENU  0
+#define GAME_SCREEN_MAIN  1
+#define GAME_SCREEN_PAUSE 2
+
+#define FOG_FADE_SPEED 2.0f
+#define FOG_DISTANCE_MAX FAR_CLIP
+
+static int game_screen = GAME_SCREEN_MENU;
 static Controls controls = {0};
 static stb_vorbis *ogg = NULL;
+static float stand_h = 1.6f;
+static float squat_h = 1.0f;
+static float cam_height = 2;
 static int mouse_x = DISPLAY_WIDTH/2;
 static int mouse_y = DISPLAY_HEIGHT/2;
 static float fog_distance = 0;
 static float fog_fader = 0;
-static bool show_fog = true;
-static bool back_culting = true;
+static Vector3 sun = {-1, -2, 0};
+static bool toggle_fog = true;
+static bool toggle_back_cult = true;
+static bool toggle_sun = true;
+
+// key pressed
+static bool key_1_was_pressed      = false;
+static bool key_2_was_pressed      = false;
+static bool key_3_was_pressed      = false;
+static bool key_space_was_pressed  = false;
+static bool key_escape_was_pressed = false;
+static bool key_return_was_pressed = false;
+
+static float angle = 0;
 
 typedef struct {
     uint8_t b, g, r, a;
@@ -73,25 +96,6 @@ typedef struct {
 static Color display[DISPLAY_WIDTH*DISPLAY_HEIGHT];
 static float rzbuffer[DISPLAY_WIDTH*DISPLAY_HEIGHT] = {0};
 static int16_t audio[AUDIO_CAPACITY];
-
-static struct {
-    int key;
-    Vector3 vel;
-    Vector3 acc;
-    float angle_yaw;
-    float angle_pit;
-} cam_ctrl[] = {
-    { .key = 'w',       .vel = { 0.0f, 0.0f, 1.0f}, .acc = { 0.0f, 0.0f, 1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 's',       .vel = { 0.0f, 0.0f,-1.0f}, .acc = { 0.0f, 0.0f,-1.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 'a',       .vel = {-1.0f, 0.0f, 0.0f}, .acc = {-1.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 'd',       .vel = { 1.0f, 0.0f, 0.0f}, .acc = { 1.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = ' ',       .vel = { 0.0f, 1.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = KEY_CTRL_L,.vel = { 0.0f,-1.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  0.0f},
-    { .key = 'q',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  1.0f, .angle_pit =  0.0f},
-    { .key = 'e',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw = -1.0f, .angle_pit =  0.0f},
-    { .key = 'r',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit =  1.0f },
-    { .key = 'f',       .vel = { 0.0f, 0.0f, 0.0f}, .acc = { 0.0f, 0.0f, 0.0f}, .angle_yaw =  0.0f, .angle_pit = -1.0f },
-};
 
 static struct {
     Vector3s vertices;
@@ -141,7 +145,9 @@ static inline void renderer_push_triangle(Vector3 v1, Vector3 v2, Vector3 v3, Co
     Vector3 face_normal = vector3_norm(vector3_cross(vector3_sub(v2, v1), vector3_sub(v3, v1)));
     Vector3 center = make_vector3( (v1.x + v2.x + v3.x) / 3.0f, (v1.y + v2.y + v3.y) / 3.0f, (v1.z + v2.z + v3.z) / 3.0f);
     Vector3 center_to_camera = vector3_norm(vector3_sub(renderer.cam_pos, center));
-    if (back_culting && vector3_dot(face_normal, center_to_camera) < 0) return;
+    if (toggle_back_cult && vector3_dot(face_normal, center_to_camera) < 0) return;
+
+    float bright = (1-vector3_dot(face_normal, vector3_norm(sun)))/2;
 
     Vector3 world_up = make_vector3(0.0f, 1.0f, 0.0f);
     Vector3 forward = make_vector3(cosf(renderer.cam_pit)*sinf(renderer.cam_yaw), sinf(renderer.cam_pit), cosf(renderer.cam_pit)*cosf(renderer.cam_yaw));
@@ -154,6 +160,9 @@ static inline void renderer_push_triangle(Vector3 v1, Vector3 v2, Vector3 v3, Co
     int unclip_n = 0;
 
     for (int i = 0; i < 3; ++i) {
+        if (toggle_sun) {
+            c[i].r *= bright; c[i].g *= bright; c[i].b *= bright;
+        }
         v[i] = vector3_sub(v[i], renderer.cam_pos);
         v[i] = make_vector3(vector3_dot(v[i], right), vector3_dot(v[i], up), vector3_dot(v[i], forward));
         v[i].x *= DISPLAY_ASPECT;
@@ -251,12 +260,13 @@ static void renderer_end(void)
                             OLIVEC_PIXEL(oc, x, y) = *(uint32_t*)&c;;
 
                             // The Fog
-                            if (show_fog) {
+                            if (toggle_fog) {
                                 float z = 1.0f / rz;
-                                float t = (z - NEAR_CLIP) / (FAR_CLIP - NEAR_CLIP);
+                                float t = 1.0f;
+                                if (fog_distance > NEAR_CLIP) t= (z - NEAR_CLIP) / (fog_distance - NEAR_CLIP);
                                 if (t < 0.0f) t = 0.0f;
                                 if (t > 1.0f) t = 1.0f;
-
+                                // t *= fog_fader;
                                 uint32_t alpha = (uint32_t)(t * 255.0f);
                                 if (alpha > 0) {
                                     uint32_t fog_r = OLIVEC_RED(*(uint32_t*)&COLOR_BACKGROUND);
@@ -349,44 +359,96 @@ static void renderer_push_floor(float floor_height, float grid_size)
     }
 }
 
-void game_jetbrainsmono_text(const char *message, float pen_x, float pen_y, Color color)
+void game_jetbrainsmono_text(const char *message, float pen_x, float pen_y, float font_scale, Color color)
 {
+    font_scale = font_scale * 0.01;
     int n = strlen(message);
     for (int i = 0; i < n; ++i) {
         int index = message[i] - JetBrainsMonoNerdFont_Regular_first_char;
         stbtt_bakedchar cdata = JetBrainsMonoNerdFont_Regular_cdata[index];
-        for (int dy = cdata.y0; dy < cdata.y1; ++dy) {
-            for (int dx = cdata.x0; dx < cdata.x1; ++dx) {
-                unsigned char intensity = JetBrainsMonoNerdFont_Regular_pixels[dy*JetBrainsMonoNerdFont_Regular_width + dx];
-                int x = pen_x + dx - cdata.x0 + cdata.xoff;
-                int y = pen_y + dy - cdata.y0 + cdata.yoff;
+
+        int scaled_x0 = (int)(cdata.x0 * font_scale);
+        int scaled_y0 = (int)(cdata.y0 * font_scale);
+        int scaled_x1 = (int)(cdata.x1 * font_scale);
+        int scaled_y1 = (int)(cdata.y1 * font_scale);
+        int scaled_xoff = (int)(cdata.xoff * font_scale);
+        int scaled_yoff = (int)(cdata.yoff * font_scale);
+        float scaled_xadvance = cdata.xadvance * font_scale;
+
+        int orig_width = cdata.x1 - cdata.x0;
+        int orig_height = cdata.y1 - cdata.y0;
+
+        for (int dy = scaled_y0; dy < scaled_y1; ++dy) {
+            int src_y = cdata.y0 + (int)((float)(dy - scaled_y0) / font_scale);
+            if (src_y < cdata.y0) src_y = cdata.y0;
+            if (src_y >= cdata.y1) src_y = cdata.y1 - 1;
+
+            for (int dx = scaled_x0; dx < scaled_x1; ++dx) {
+                int src_x = cdata.x0 + (int)((float)(dx - scaled_x0) / font_scale);
+                if (src_x < cdata.x0) src_x = cdata.x0;
+                if (src_x >= cdata.x1) src_x = cdata.x1 - 1;
+
+                unsigned char intensity = JetBrainsMonoNerdFont_Regular_pixels[src_y * JetBrainsMonoNerdFont_Regular_width + src_x];
+                int x = pen_x + dx - scaled_x0 + scaled_xoff;
+                int y = pen_y + dy - scaled_y0 + scaled_yoff;
+
                 if (0 <= x && x < DISPLAY_WIDTH && 0 <= y && y < DISPLAY_HEIGHT) {
-                    int j = y*DISPLAY_WIDTH + x;
+                    int j = y * DISPLAY_WIDTH + x;
                     Color color_b = display[j];
-                    color.a = intensity;
+                    Color color_f = color;
+                    color_f.a = intensity;
 
-                    Color color_f = {0};
-
-                    color_f.a = color.a + color_b.a*(255 - color.a)/255;
-                    if (color_f.a == 0) {
-                        display[j] = (Color) {0};
+                    Color blended = {0};
+                    blended.a = color_f.a + color_b.a * (255 - color_f.a) / 255;
+                    if (blended.a == 0) {
+                        display[j] = (Color){0};
                         continue;
                     }
-
                     uint32_t sum;
-                    sum = (uint32_t)color.r*color.a*255 + (uint32_t)color_b.r*color_b.a*(255 - color.a);
-                    color_f.r = (uint8_t)(sum/ (255*color_f.a));
-                    sum = (uint32_t)color.g*color.a*255 + (uint32_t)color_b.g*color_b.a*(255 - color.a);
-                    color_f.g = (uint8_t)(sum/ (255*color_f.a));
-                    sum = (uint32_t)color.b*color.a*255 + (uint32_t)color_b.b*color_b.a*(255 - color.a);
-                    color_f.b = (uint8_t)(sum/ (255*color_f.a));
+                    sum = (uint32_t)color_f.r * color_f.a * 255 + (uint32_t)color_b.r * color_b.a * (255 - color_f.a);
+                    blended.r = (uint8_t)(sum / (255 * blended.a));
+                    sum = (uint32_t)color_f.g * color_f.a * 255 + (uint32_t)color_b.g * color_b.a * (255 - color_f.a);
+                    blended.g = (uint8_t)(sum / (255 * blended.a));
+                    sum = (uint32_t)color_f.b * color_f.a * 255 + (uint32_t)color_b.b * color_b.a * (255 - color_f.a);
+                    blended.b = (uint8_t)(sum / (255 * blended.a));
 
-                    display[j] = color_f;
+                    display[j] = blended;
                 }
             }
         }
-        pen_x += cdata.xadvance;
+        pen_x += scaled_xadvance;
     }
+}
+
+void game_jetbrainsmono_text_center(const char *message, float center_x, float pen_y, float font_scale, Color color)
+{
+    float total_width = 0;
+    for (const char *p = message; *p; ++p) {
+        int idx = *p - JetBrainsMonoNerdFont_Regular_first_char;
+        if (idx >= 0 && idx < 95) {
+            stbtt_bakedchar cdata = JetBrainsMonoNerdFont_Regular_cdata[idx];
+            total_width += cdata.xadvance * font_scale * 0.01;
+        }
+    }
+    float start_x = center_x - total_width * 0.5f;
+    game_jetbrainsmono_text(message, start_x, pen_y, font_scale, color);
+}
+
+void renderer_main_scene(void)
+{
+    renderer_begin();
+    {
+        // utahTeapot
+        Vector3 teapot_pos = {0, 1, 0};
+        float teapot_angle_xz = angle;
+        float teapot_scale = 0.5f;
+        renderer_push_utahteapot(teapot_pos, teapot_angle_xz, teapot_scale);
+
+        // Floor
+        float floor_height = 0.0f;
+        renderer_push_floor(floor_height, 1);
+    }
+    renderer_end();
 }
 
 Game game_init(void)
@@ -410,14 +472,9 @@ Game game_init(void)
     };
 }
 
-static float angle = 0;
-
-void game_update(void)
+void game_main(void)
 {
-    uint64_t perf_begin = nanos_since_unspecified_epoch();
-
     // Logic
-    float cam_height = 1.60f;
     float cam_h_acc = 25.0f;
     float cam_ground_f = 10.0f;
     float cam_ground_vf = 0.5f;
@@ -429,6 +486,15 @@ void game_update(void)
     Vector3 cam_right   = {-cosf(renderer.cam_yaw), 0, sinf(renderer.cam_yaw) };
     
     bool on_ground = (renderer.cam_pos.y <= cam_height);
+    if (controls.keyboard['c']) {
+        cam_height = squat_h;
+    } else {
+        cam_height = stand_h;
+    }
+
+    if (on_ground) {
+        renderer.cam_pos.y = cam_height;
+    }
 
     Vector3 move_h_acc = {0,0,0};
     if (controls.keyboard['w']) move_h_acc = vector3_add(move_h_acc, cam_forward);
@@ -451,17 +517,26 @@ void game_update(void)
     renderer.cam_vel.z += move_h_acc.z * DELTA_TIME;
     renderer.cam_vel.y += gravity * DELTA_TIME;
 
-    static bool jump_was_pressed = false;
-    if (controls.keyboard[' '] && on_ground && !jump_was_pressed) {
+    if (controls.keyboard[' '] && on_ground && !key_space_was_pressed) {
         renderer.cam_vel.y = jump_vel;
-        jump_was_pressed = true;
+        key_space_was_pressed = true;
     } else if (!controls.keyboard[' ']) {
-        jump_was_pressed = false;
+        key_space_was_pressed = false;
     }
 
     renderer.cam_pos.x += renderer.cam_vel.x * DELTA_TIME;
     renderer.cam_pos.y += renderer.cam_vel.y * DELTA_TIME;
     renderer.cam_pos.z += renderer.cam_vel.z * DELTA_TIME;
+
+    if (vel_xz < 0.1 &&
+            !controls.keyboard['w'] &&
+            !controls.keyboard['s'] &&
+            !controls.keyboard['a'] &&
+            !controls.keyboard['d']) {
+        renderer.cam_vel.x = 0;
+        renderer.cam_vel.z = 0;
+        vector3_scale(move_h_acc, 0);
+    }
 
     if (renderer.cam_pos.y < cam_height) {
         renderer.cam_pos.y = cam_height;
@@ -477,55 +552,148 @@ void game_update(void)
     if (renderer.cam_pit >  MAX_PITCH) renderer.cam_pit =  MAX_PITCH;
     if (renderer.cam_pit < -MAX_PITCH) renderer.cam_pit = -MAX_PITCH;
 
-    renderer.cam_yaw   += controls.mouse_dx * 0.003f;
-    renderer.cam_pit   += controls.mouse_dy * 0.003f;
+    // renderer.cam_yaw   += controls.mouse_dx * 0.003f;
+    // renderer.cam_pit   += controls.mouse_dy * 0.003f;
     controls.mouse_dx = 0;
     controls.mouse_dy = 0;
 
-    static bool key_1_was_pressed = false;
+    // Toggle Fog
     if (controls.keyboard['1'] && !key_1_was_pressed) {
-        show_fog = !show_fog;
+        toggle_fog = !toggle_fog;
         key_1_was_pressed = true;
     } else if (!controls.keyboard['1']) {
         key_1_was_pressed = false;
     }
-    static bool key_2_was_pressed = false;
+    
+    // Toggle Back Culting
     if (controls.keyboard['2'] && !key_2_was_pressed) {
-        back_culting = !back_culting;
+        toggle_back_cult = !toggle_back_cult;
         key_2_was_pressed = true;
     } else if (!controls.keyboard['2']) {
         key_2_was_pressed = false;
+    }
+
+    // Toggle Sun
+    if (controls.keyboard['3'] && !key_3_was_pressed) {
+        toggle_sun = !toggle_sun;
+        key_3_was_pressed = true;
+    } else if (!controls.keyboard['3']) {
+        key_3_was_pressed = false;
+    }
+
+    if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
+        key_escape_was_pressed = true;
+        game_screen = GAME_SCREEN_PAUSE;
+    } else if (!controls.keyboard[XK_Escape]) {
+        key_escape_was_pressed = false;
+    }
+
+    if (fog_fader < 1.0f) {
+        fog_fader += FOG_FADE_SPEED*DELTA_TIME;
+        if (fog_fader > 1.0f) fog_fader = 1.0f;
+        fog_distance = fog_fader*fog_fader*FOG_DISTANCE_MAX;
+    }
+    renderer_main_scene();
+
+    game_jetbrainsmono_text(temp_sprintf("Pos: %5.2f,%5.2f,%5.2f", renderer.cam_pos.x, renderer.cam_pos.y-cam_height, renderer.cam_pos.z), 10, 50, 24, COLOR_FOREGROUND);
+    game_jetbrainsmono_text(temp_sprintf("Vel: %5.2f,%5.2f,%5.2f", renderer.cam_vel.x, renderer.cam_vel.y, renderer.cam_vel.z), 10, 75, 24, COLOR_FOREGROUND);
+    game_jetbrainsmono_text(temp_sprintf("Vxz: %5.2f", vel_xz), 10, 100, 24, COLOR_FOREGROUND);
+}
+
+void game_menu(void)
+{
+    for (int i = 0; i < DISPLAY_WIDTH*DISPLAY_HEIGHT; ++i) {
+        display[i] = COLOR_BACKGROUND;
+    }
+
+    if (fog_fader > 0) {
+        fog_fader -= FOG_FADE_SPEED*DELTA_TIME;
+        if (fog_fader < 0.0f) fog_fader = 0.0f;
+        fog_distance = fog_fader*fog_fader*FOG_DISTANCE_MAX;
+        renderer_main_scene();
+    }
+
+    game_jetbrainsmono_text_center("MENU", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/4, 100, COLOR_FOREGROUND);
+    game_jetbrainsmono_text_center("Press <ENTER> to start", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2, 48, COLOR_FOREGROUND);
+    game_jetbrainsmono_text_center("Press <ESC> to exit", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2 + 100, 48, COLOR_FOREGROUND);
+
+    if (controls.keyboard[XK_Return] && !key_return_was_pressed) {
+        game_screen = GAME_SCREEN_MAIN;
+        key_return_was_pressed = true;
+    } else if (!controls.keyboard[XK_Return]) {
+        key_return_was_pressed = false;
+    }
+
+    if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
+        exit(0);
+        key_escape_was_pressed = true;
+    } else if (!controls.keyboard[XK_Escape]) {
+        key_escape_was_pressed = false;
+    }
+}
+
+void game_pause(void)
+{
+    for (int i = 0; i < DISPLAY_WIDTH*DISPLAY_HEIGHT; ++i) {
+        display[i] = COLOR_BACKGROUND;
+    }
+
+    if (fog_fader > 0) {
+        fog_fader -= FOG_FADE_SPEED*DELTA_TIME;
+        if (fog_fader < 0.0f) fog_fader = 0.0f;
+        fog_distance = fog_fader*fog_fader*FOG_DISTANCE_MAX;
+        renderer_main_scene();
+    }
+
+    game_jetbrainsmono_text_center("PAUSED", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/4, 100, COLOR_FOREGROUND);
+    game_jetbrainsmono_text_center("Press <ESC> to resume", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2, 48, COLOR_FOREGROUND);
+    game_jetbrainsmono_text_center("Press <Q> to menu", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2 + 100, 48, COLOR_FOREGROUND);
+
+    if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
+        game_screen = GAME_SCREEN_MAIN;
+        key_escape_was_pressed = true;
+    } else if (!controls.keyboard[XK_Escape]) {
+        key_escape_was_pressed = false;
+    }
+
+    if (controls.keyboard['q']) {
+        game_screen = GAME_SCREEN_MENU;
+    };
+}
+
+void game_update(void)
+{
+    uint64_t perf_begin = nanos_since_unspecified_epoch();
+
+    switch (game_screen) {
+        case GAME_SCREEN_MAIN:
+            {
+                game_main();  break;
+            }
+        case GAME_SCREEN_MENU:
+            {
+                game_menu();  break;
+            }
+        case GAME_SCREEN_PAUSE:
+            {
+                game_pause(); break;
+            }
+        default: UNREACHABLE("game_screen");
     }
 
     // Audio
     memset(audio, 0, sizeof(audio));
     stb_vorbis_get_samples_short_interleaved(ogg, AUDIO_CHANNELS, audio, AUDIO_CAPACITY);
 
-    // Display
-    renderer_begin();
-    {
-        // utahTeapot
-        Vector3 teapot_pos = {0, 1, 0};
-        float teapot_angle_xz = angle;
-        float teapot_scale = 0.5f;
-        renderer_push_utahteapot(teapot_pos, teapot_angle_xz, teapot_scale);
-
-        // Floor
-        float floor_height = 0.0f;
-        renderer_push_floor(floor_height, 1);
-    }
-    renderer_end();
-
-    angle += 0.25*M_PI*DELTA_TIME;
-
     // FPS computing
     uint64_t perf_end = nanos_since_unspecified_epoch();
     uint64_t delta = perf_end - perf_begin;
     int fps = 1.0/((double)delta/NANOS_PER_SEC);
-    game_jetbrainsmono_text(temp_sprintf("FPS: %3d", fps), 10, 25, COLOR_FOREGROUND);
-    game_jetbrainsmono_text(temp_sprintf("Pos: %5.2f,%5.2f,%5.2f", renderer.cam_pos.x, renderer.cam_pos.y-cam_height, renderer.cam_pos.z), 10, 50, COLOR_FOREGROUND);
-    game_jetbrainsmono_text(temp_sprintf("Vel: %5.2f,%5.2f,%5.2f", renderer.cam_vel.x, renderer.cam_vel.y, renderer.cam_vel.z), 10, 75, COLOR_FOREGROUND);
-    game_jetbrainsmono_text(temp_sprintf("Vxz: %5.2f", vel_xz), 10, 100, COLOR_FOREGROUND);
+    game_jetbrainsmono_text(temp_sprintf("FPS: %3d", fps), 10, 25, 24, COLOR_FOREGROUND);
+
+    game_jetbrainsmono_text(temp_sprintf("SCENE: %1d", game_screen), 10, DISPLAY_HEIGHT, 24, COLOR_RED);
+
+    angle += 0.25*M_PI*DELTA_TIME;
 }
 
 void game_key_up(int key)

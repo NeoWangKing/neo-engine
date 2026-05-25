@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     if (!nob_read_entire_file(*input_path, &sb)) return 1;
     nob_log(INFO, "read %zu bytes from %s", sb.count, *input_path);
 
-    float font_height = 24.0f;
+    float font_height = 100.0f;
     int first_char = 32;
     int n = stbtt_BakeFontBitmap((const unsigned char*)sb.items, 0,
             font_height,

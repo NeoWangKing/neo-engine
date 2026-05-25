@@ -123,12 +123,6 @@ int main(void)
                     {
                         KeySym key = XLookupKeysym(&event.xkey, 0);
                         if (key >= 'A' && key <= 'Z') key = tolower(key);
-
-                        if (key == XK_Escape) {
-                            quit = true;
-                            break;
-                        }
-
                         game_key_down(key);
                         break;
                     }
