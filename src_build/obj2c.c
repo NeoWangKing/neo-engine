@@ -241,7 +241,7 @@ int main(int argc, char **argv)
     char **input_path  = flag_str("i", NULL, "Input .obj file path (MANDATORY)");
     char **output_path = flag_str("o", NULL, "Output .h file path (MANDATORY)");
     char **name        = flag_str("n", NULL, "Name of the model (MANDATORY)");
-    char **scale_str   = flag_str("s", "0.75", "Scale factor for the model (default: 0.75)");
+    char **scale_str   = flag_str("s", "1.0", "Scale factor for the model (default: 1.0)");
     char **delete_str  = flag_str("d", NULL, "Comma-separated list of component indices to delete, e.g. \"1,3,5\"");
     bool *help         = flag_bool("help", true, "Print this help message");
 
@@ -331,19 +331,31 @@ int main(int argc, char **argv)
 
                 da_append(&vertices, make_vertex(x, y, z));
             } else if (sv_eq(kind, sv_from_cstr("f"))) {
-                int v1, v2, v3, vt1, vt2, vt3, vn1, vn2, vn3;
-                int face_index = faces.count;
+                int v[32], vt[32], vn[32];
+                int vertex_count = 0;
 
-                parse_face_triple(&line, &lf, &hf, &v1, &vt1, &vn1);
-                da_append(&vertices.items[v1].faces, face_index);
+                while (line.count > 0 && vertex_count < 32) {
+                    parse_face_triple(&line, &lf, &hf, &v[vertex_count], &vt[vertex_count], &vn[vertex_count]);
+                    vertex_count++;
+                }
 
-                parse_face_triple(&line, &lf, &hf, &v2, &vt2, &vn2);
-                da_append(&vertices.items[v2].faces, face_index);
+                if (vertex_count < 3) {
+                    fprintf(stderr, "Invalid face with less than 3 vertices\n");
+                    return 1;
+                }
 
-                parse_face_triple(&line, &lf, &hf, &v3, &vt3, &vn3);
-                da_append(&vertices.items[v3].faces, face_index);
+                for (int i = 1; i < vertex_count - 1; ++i) {
+                    int face_index = faces.count;
+                    da_append(&vertices.items[v[0]].faces, face_index);
+                    da_append(&vertices.items[v[i]].faces, face_index);
+                    da_append(&vertices.items[v[i+1]].faces, face_index);
 
-                da_append(&faces, make_face(v1, v2, v3, vt1, vt2, vt3, vn1, vn2, vn3));
+                    da_append(&faces, make_face(
+                                v[0], v[i], v[i+1],
+                                vt[0], vt[i], vt[i+1],
+                                vn[0], vn[i], vn[i+1]
+                                ));
+                }
             } else if (sv_eq(kind, sv_from_cstr("mtllib"))) {
                 fprintf(stderr, "%s:%zu: WARNING: mtllib not supported, ignoring.\n", *input_path, line_number);
             } else if (sv_eq(kind, sv_from_cstr("usemtl"))) {
