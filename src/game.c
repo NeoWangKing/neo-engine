@@ -56,7 +56,7 @@ static Controls controls = {0};
 static stb_vorbis *ogg = NULL;
 static float stand_h = 1.6f;
 static float squat_h = 1.0f;
-static float cam_height = 2;
+static float cam_height = 3.0f;
 static int mouse_x = DISPLAY_WIDTH/2;
 static int mouse_y = DISPLAY_HEIGHT/2;
 static float fog_distance = 0;
@@ -694,10 +694,10 @@ void game_menu(void)
             if (menu_item(&m, "Start Game", true)) {
                 game_screen = GAME_SCREEN_MAIN;
             }
-            if (menu_item(&m, "Pause", true)) {
-                menu_selected = 0;
-                game_screen = GAME_SCREEN_PAUSE;
-            }
+            // if (menu_item(&m, "Pause", true)) {
+            //     menu_selected = 0;
+            //     game_screen = GAME_SCREEN_PAUSE;
+            // }
             if (menu_item(&m, "Setting", false)) {
             }
             if (menu_item(&m, "Quit", true)) {
@@ -721,7 +721,7 @@ void game_pause(void)
     }
 
     if (fog_fader == 0) {
-        menu_title("Neo Game");
+        menu_title("P A U S E");
 
         {
             Menu m = {0};
@@ -735,6 +735,9 @@ void game_pause(void)
                     menu_selected = 0;
                     game_screen = GAME_SCREEN_MENU;
                 }
+                // if (menu_item(&m, "Quit", true)) {
+                //     exit(0);
+                // }
             } menu_end(&m);
         }
     }
