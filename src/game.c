@@ -17,8 +17,9 @@
 #include "fonts/JetBrainsMonoNerdFont_Regular.h"
 
 #define TARGET_FPS 60
-#define DISPLAY_WIDTH  800
-#define DISPLAY_HEIGHT 600
+#define DISPLAY_ZOOM 80
+#define DISPLAY_WIDTH  (16*DISPLAY_ZOOM)
+#define DISPLAY_HEIGHT (9*DISPLAY_ZOOM)
 #define DISPLAY_ASPECT (float)DISPLAY_HEIGHT/DISPLAY_WIDTH
 // #define DISPLAY_WIDTH  1920
 // #define DISPLAY_HEIGHT 1080
@@ -48,6 +49,8 @@ static_assert(AUDIO_SAMPLE_RATE%TARGET_FPS == 0, "Sample rate must be divisible 
 #define FOG_FADE_SPEED 2.0f
 #define FOG_DISTANCE_MAX FAR_CLIP
 
+static int menu_selected = 0;
+
 static int game_screen = GAME_SCREEN_MENU;
 static Controls controls = {0};
 static stb_vorbis *ogg = NULL;
@@ -67,6 +70,8 @@ static bool toggle_sun = true;
 static bool key_1_was_pressed      = false;
 static bool key_2_was_pressed      = false;
 static bool key_3_was_pressed      = false;
+static bool key_w_was_pressed      = false;
+static bool key_s_was_pressed      = false;
 static bool key_space_was_pressed  = false;
 static bool key_escape_was_pressed = false;
 static bool key_return_was_pressed = false;
@@ -583,6 +588,7 @@ void game_main(void)
 
     if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
         key_escape_was_pressed = true;
+        menu_selected = 0;
         game_screen = GAME_SCREEN_PAUSE;
     } else if (!controls.keyboard[XK_Escape]) {
         key_escape_was_pressed = false;
@@ -595,9 +601,80 @@ void game_main(void)
     }
     renderer_main_scene();
 
-    game_jetbrainsmono_text(temp_sprintf("Pos: %5.2f,%5.2f,%5.2f", renderer.cam_pos.x, renderer.cam_pos.y-cam_height, renderer.cam_pos.z), 10, 50, 24, COLOR_FOREGROUND);
-    game_jetbrainsmono_text(temp_sprintf("Vel: %5.2f,%5.2f,%5.2f", renderer.cam_vel.x, renderer.cam_vel.y, renderer.cam_vel.z), 10, 75, 24, COLOR_FOREGROUND);
-    game_jetbrainsmono_text(temp_sprintf("Vxz: %5.2f", vel_xz), 10, 100, 24, COLOR_FOREGROUND);
+    if (fog_fader == 1.0f) {
+        game_jetbrainsmono_text(temp_sprintf("Pos: %5.2f,%5.2f,%5.2f", renderer.cam_pos.x, renderer.cam_pos.y-cam_height, renderer.cam_pos.z), 10, 50, 24, COLOR_FOREGROUND);
+        game_jetbrainsmono_text(temp_sprintf("Vel: %5.2f,%5.2f,%5.2f", renderer.cam_vel.x, renderer.cam_vel.y, renderer.cam_vel.z), 10, 75, 24, COLOR_FOREGROUND);
+        game_jetbrainsmono_text(temp_sprintf("Vxz: %5.2f", vel_xz), 10, 100, 24, COLOR_FOREGROUND);
+    }
+}
+
+void menu_title(const char *title)
+{
+    game_jetbrainsmono_text_center(title, (float)DISPLAY_WIDTH / 2, (float)DISPLAY_HEIGHT / 4, 100, COLOR_FOREGROUND);
+}
+
+void menu_begin(Menu *m)
+{
+    m->selected = menu_selected;
+    m->count = 0;
+    m->start_y = DISPLAY_HEIGHT / 2.0f;
+    m->item_spacing = 60.0f;
+}
+
+bool menu_item(Menu *m, const char *text, bool enabled)
+{
+    float y = m->start_y + m->count * m->item_spacing;
+    bool is_selected = (m->count == m->selected);
+
+    Color color;
+    if (!enabled) {
+        color = (Color){0x88, 0x88, 0x88, 0xFF};
+    } else if (is_selected) {
+        color = COLOR_FOREGROUND;
+    } else {
+        color = (Color){0x18, 0x18, 0x18, 0xFF};
+    }
+
+    game_jetbrainsmono_text_center(text, (float)DISPLAY_WIDTH / 2, y, 48, color);
+
+    bool activated = false;
+    // if (controls.keyboard[XK_Return] && !key_return_was_pressed) {
+    //     key_return_was_pressed = true;
+    //     if (is_selected) activated = true;
+    // }else if (!controls.keyboard[XK_Return]) {
+    //     key_return_was_pressed = false;
+    // }
+    if (controls.keyboard[' '] && !key_space_was_pressed) {
+        if (is_selected) {
+            activated = true;
+            key_space_was_pressed = true;
+        }
+    }else if (!controls.keyboard[' ']) {
+        key_space_was_pressed = false;
+    }
+
+    m->count++;
+    return activated;
+}
+
+void menu_end(Menu *m)
+{
+    bool up   = controls.keyboard['w'];
+    bool down = controls.keyboard['s'];
+
+    if (up && !key_w_was_pressed) {
+        menu_selected--;
+    }
+    if (down && !key_s_was_pressed) {
+        key_s_was_pressed = true;
+        menu_selected++;
+    }
+
+    key_w_was_pressed = up;
+    key_s_was_pressed = down;
+
+    if (menu_selected >= m->count) menu_selected = 0;
+    if (menu_selected < 0)        menu_selected = m->count - 1;
 }
 
 void game_menu(void)
@@ -606,29 +683,27 @@ void game_menu(void)
         display[i] = COLOR_BACKGROUND;
     }
 
-    if (fog_fader > 0) {
-        fog_fader -= FOG_FADE_SPEED*DELTA_TIME;
-        if (fog_fader < 0.0f) fog_fader = 0.0f;
-        fog_distance = fog_fader*fog_fader*FOG_DISTANCE_MAX;
-        renderer_main_scene();
-    }
+    fog_fader = 0;
+    // key_space_was_pressed = false;
 
-    game_jetbrainsmono_text_center("MENU", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/4, 100, COLOR_FOREGROUND);
-    game_jetbrainsmono_text_center("Press <ENTER> to start", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2, 48, COLOR_FOREGROUND);
-    game_jetbrainsmono_text_center("Press <ESC> to exit", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2 + 100, 48, COLOR_FOREGROUND);
+    menu_title("Neo Game");
 
-    if (controls.keyboard[XK_Return] && !key_return_was_pressed) {
-        game_screen = GAME_SCREEN_MAIN;
-        key_return_was_pressed = true;
-    } else if (!controls.keyboard[XK_Return]) {
-        key_return_was_pressed = false;
-    }
-
-    if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
-        exit(0);
-        key_escape_was_pressed = true;
-    } else if (!controls.keyboard[XK_Escape]) {
-        key_escape_was_pressed = false;
+    {
+        Menu m = {0};
+        menu_begin(&m); {
+            if (menu_item(&m, "Start Game", true)) {
+                game_screen = GAME_SCREEN_MAIN;
+            }
+            if (menu_item(&m, "Pause", true)) {
+                menu_selected = 0;
+                game_screen = GAME_SCREEN_PAUSE;
+            }
+            if (menu_item(&m, "Setting", false)) {
+            }
+            if (menu_item(&m, "Quit", true)) {
+                exit(0);
+            }
+        } menu_end(&m);
     }
 }
 
@@ -645,9 +720,24 @@ void game_pause(void)
         renderer_main_scene();
     }
 
-    game_jetbrainsmono_text_center("PAUSED", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/4, 100, COLOR_FOREGROUND);
-    game_jetbrainsmono_text_center("Press <ESC> to resume", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2, 48, COLOR_FOREGROUND);
-    game_jetbrainsmono_text_center("Press <Q> to menu", (float)DISPLAY_WIDTH/2, (float)DISPLAY_HEIGHT/2 + 100, 48, COLOR_FOREGROUND);
+    if (fog_fader == 0) {
+        menu_title("Neo Game");
+
+        {
+            Menu m = {0};
+            menu_begin(&m); {
+                if (menu_item(&m, "Continue", true)) {
+                    game_screen = GAME_SCREEN_MAIN;
+                }
+                if (menu_item(&m, "Setting", false)) {
+                }
+                if (menu_item(&m, "Menu", true)) {
+                    menu_selected = 0;
+                    game_screen = GAME_SCREEN_MENU;
+                }
+            } menu_end(&m);
+        }
+    }
 
     if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
         game_screen = GAME_SCREEN_MAIN;
@@ -655,10 +745,6 @@ void game_pause(void)
     } else if (!controls.keyboard[XK_Escape]) {
         key_escape_was_pressed = false;
     }
-
-    if (controls.keyboard['q']) {
-        game_screen = GAME_SCREEN_MENU;
-    };
 }
 
 void game_update(void)

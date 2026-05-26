@@ -36,10 +36,10 @@ int main(void)
     };
 
     pa_buffer_attr ba = {
-        .maxlength = -1,           // 自动
-        .tlength   = 131072,        // 目标缓冲区大小，建议 32768 或 65536
-        .prebuf    = -1,           // 自动
-        .minreq    = -1,           // 自动
+        .maxlength = -1,
+        .tlength   = 131072,
+        .prebuf    = -1,
+        .minreq    = -1,
     };
 
     int error = 0;

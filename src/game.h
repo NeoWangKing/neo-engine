@@ -26,6 +26,13 @@ typedef struct {
     Controls *controls;
 } Game;
 
+typedef struct {
+    int selected;           // 当前选中项索引
+    int count;              // 菜单项计数（用于定位）
+    float start_y;          // 第一个菜单项的 Y 坐标（基线）
+    float item_spacing;     // 项之间的垂直间距
+} Menu;
+
 Game game_init(void);
 void game_update(void);
 void game_key_up(int key);
