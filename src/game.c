@@ -1,9 +1,7 @@
 #include <assert.h>
 #include <math.h>
-#include <X11/keysym.h>
 #include <stddef.h>
 #include <stdint.h>
-// #include "X11/Xlib.h"
 #include "nob.h"
 #undef temp_alloc
 #include "vec.h"
@@ -17,7 +15,7 @@
 #include "fonts/JetBrainsMonoNerdFont_Regular.h"
 
 #define TARGET_FPS 60
-#define DISPLAY_ZOOM 80
+#define DISPLAY_ZOOM 60
 #define DISPLAY_WIDTH  (16*DISPLAY_ZOOM)
 #define DISPLAY_HEIGHT (9*DISPLAY_ZOOM)
 #define DISPLAY_ASPECT (float)DISPLAY_HEIGHT/DISPLAY_WIDTH
@@ -39,8 +37,13 @@ static_assert(AUDIO_SAMPLE_RATE%TARGET_FPS == 0, "Sample rate must be divisible 
 #define COLOR_BACKGROUND ((Color) { .r = 0xFF, .g = 0xFF, .b = 0xAA, .a = 0xFF })
 #define COLOR_FOREGROUND ((Color) { .r = 0xAA, .g = 0xAA, .b = 0xFF, .a = 0xFF })
 
-#define KEY_CTRL_L XK_Control_L
-#define KEY_CTRL_R XK_Control_R
+#define KEY_CTRL_L      0xffe3
+#define KEY_CTRL_R      0xffe4
+#define KEY_BACKSPACE   0xff08  /* U+0008 BACKSPACE */
+#define KEY_TAB         0xff09  /* U+0009 CHARACTER TABULATION */
+#define KEY_RETURN      0xff0d  /* U+000D CARRIAGE RETURN */
+#define KEY_ESCAPE      0xff1b  /* U+001B ESCAPE */
+#define KEY_DELETE      0xffff  /* U+007F DELETE */
 
 #define GAME_SCREEN_MENU  0
 #define GAME_SCREEN_MAIN  1
@@ -152,7 +155,7 @@ static inline void renderer_push_triangle(Vector3 v1, Vector3 v2, Vector3 v3, Co
     Vector3 center_to_camera = vector3_norm(vector3_sub(renderer.cam_pos, center));
     if (toggle_back_cult && vector3_dot(face_normal, center_to_camera) < 0) return;
 
-    float bright = (1-vector3_dot(face_normal, vector3_norm(sun)))/2;
+    uint32_t alpha = (1+vector3_dot(face_normal, vector3_norm(sun)))*255/2;
 
     Vector3 world_up = make_vector3(0.0f, 1.0f, 0.0f);
     Vector3 forward = make_vector3(cosf(renderer.cam_pit)*sinf(renderer.cam_yaw), sinf(renderer.cam_pit), cosf(renderer.cam_pit)*cosf(renderer.cam_yaw));
@@ -164,9 +167,10 @@ static inline void renderer_push_triangle(Vector3 v1, Vector3 v2, Vector3 v3, Co
     int unclip[3] = {0};
     int unclip_n = 0;
 
+    Color dark = { .r = 0x00, .g = 0x00, .b = 0x00, .a = alpha, };
     for (int i = 0; i < 3; ++i) {
         if (toggle_sun) {
-            c[i].r *= bright; c[i].g *= bright; c[i].b *= bright;
+            olivec_blend_color((uint32_t*)&c[i], *(uint32_t*)&dark);
         }
         v[i] = vector3_sub(v[i], renderer.cam_pos);
         v[i] = make_vector3(vector3_dot(v[i], right), vector3_dot(v[i], up), vector3_dot(v[i], forward));
@@ -522,12 +526,7 @@ void game_main(void)
     renderer.cam_vel.z += move_h_acc.z * DELTA_TIME;
     renderer.cam_vel.y += gravity * DELTA_TIME;
 
-    if (controls.keyboard[' '] && on_ground && !key_space_was_pressed) {
-        renderer.cam_vel.y = jump_vel;
-        key_space_was_pressed = true;
-    } else if (!controls.keyboard[' ']) {
-        key_space_was_pressed = false;
-    }
+    if (game_key_pressed(' ') && on_ground) renderer.cam_vel.y = jump_vel;
 
     renderer.cam_pos.x += renderer.cam_vel.x * DELTA_TIME;
     renderer.cam_pos.y += renderer.cam_vel.y * DELTA_TIME;
@@ -563,35 +562,17 @@ void game_main(void)
     controls.mouse_dy = 0;
 
     // Toggle Fog
-    if (controls.keyboard['1'] && !key_1_was_pressed) {
-        toggle_fog = !toggle_fog;
-        key_1_was_pressed = true;
-    } else if (!controls.keyboard['1']) {
-        key_1_was_pressed = false;
-    }
+    if (game_key_pressed('1')) toggle_fog = !toggle_fog;
     
     // Toggle Back Culting
-    if (controls.keyboard['2'] && !key_2_was_pressed) {
-        toggle_back_cult = !toggle_back_cult;
-        key_2_was_pressed = true;
-    } else if (!controls.keyboard['2']) {
-        key_2_was_pressed = false;
-    }
+    if (game_key_pressed('2')) toggle_back_cult = !toggle_back_cult;
 
     // Toggle Sun
-    if (controls.keyboard['3'] && !key_3_was_pressed) {
-        toggle_sun = !toggle_sun;
-        key_3_was_pressed = true;
-    } else if (!controls.keyboard['3']) {
-        key_3_was_pressed = false;
-    }
+    if (game_key_pressed('3')) toggle_sun = !toggle_sun;
 
-    if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
-        key_escape_was_pressed = true;
+    if (game_key_pressed(KEY_ESCAPE)) {
         menu_selected = 0;
         game_screen = GAME_SCREEN_PAUSE;
-    } else if (!controls.keyboard[XK_Escape]) {
-        key_escape_was_pressed = false;
     }
 
     if (fog_fader < 1.0f) {
@@ -638,19 +619,8 @@ bool menu_item(Menu *m, const char *text, bool enabled)
     game_jetbrainsmono_text_center(text, (float)DISPLAY_WIDTH / 2, y, 48, color);
 
     bool activated = false;
-    // if (controls.keyboard[XK_Return] && !key_return_was_pressed) {
-    //     key_return_was_pressed = true;
-    //     if (is_selected) activated = true;
-    // }else if (!controls.keyboard[XK_Return]) {
-    //     key_return_was_pressed = false;
-    // }
-    if (controls.keyboard[' '] && !key_space_was_pressed) {
-        if (is_selected) {
-            activated = true;
-            key_space_was_pressed = true;
-        }
-    }else if (!controls.keyboard[' ']) {
-        key_space_was_pressed = false;
+    if (game_key_pressed(' ')) {
+        if (is_selected) activated = true;
     }
 
     m->count++;
@@ -662,16 +632,8 @@ void menu_end(Menu *m)
     bool up   = controls.keyboard['w'];
     bool down = controls.keyboard['s'];
 
-    if (up && !key_w_was_pressed) {
-        menu_selected--;
-    }
-    if (down && !key_s_was_pressed) {
-        key_s_was_pressed = true;
-        menu_selected++;
-    }
-
-    key_w_was_pressed = up;
-    key_s_was_pressed = down;
+    if (game_key_pressed('w')) menu_selected--;
+    if (game_key_pressed('s')) menu_selected++;
 
     if (menu_selected >= m->count) menu_selected = 0;
     if (menu_selected < 0)        menu_selected = m->count - 1;
@@ -742,12 +704,7 @@ void game_pause(void)
         }
     }
 
-    if (controls.keyboard[XK_Escape] && !key_escape_was_pressed) {
-        game_screen = GAME_SCREEN_MAIN;
-        key_escape_was_pressed = true;
-    } else if (!controls.keyboard[XK_Escape]) {
-        key_escape_was_pressed = false;
-    }
+    if (game_key_pressed(KEY_ESCAPE)) game_screen = GAME_SCREEN_MAIN;
 }
 
 void game_update(void)
@@ -783,18 +740,33 @@ void game_update(void)
     game_jetbrainsmono_text(temp_sprintf("SCENE: %1d", game_screen), 10, DISPLAY_HEIGHT, 24, COLOR_RED);
 
     angle += 0.25*M_PI*DELTA_TIME;
+
+    memset(controls.key_just_pressed, 0, sizeof(controls.key_just_pressed));
+    memset(controls.key_just_released, 0, sizeof(controls.key_just_released));
 }
 
 void game_key_up(int key)
 {
-    if (key >= 0 && key < 65536) {
-        controls.keyboard[key] = false;
-    }
+    if (key < 0 || key >= 65536) return;
+    if (controls.keyboard[key]) controls.key_just_released[key] = true;
+    controls.keyboard[key] = false;
 }
 
 void game_key_down(int key)
 {
-    if (key >= 0 && key < 65536) {
-        controls.keyboard[key] = true;
-    }
+    if (key < 0 || key >= 65536) return;
+    if (!controls.keyboard[key]) controls.key_just_pressed[key] = true;
+    controls.keyboard[key] = true;
+}
+
+bool game_key_pressed(int key)
+{
+    if (key < 0 || key >= 65536) return false;
+    return controls.key_just_pressed[key];
+}
+
+bool game_key_released(int key)
+{
+    if (key < 0 || key >= 65536) return false;
+    return controls.key_just_released[key];
 }

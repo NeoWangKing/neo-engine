@@ -9,87 +9,127 @@
 #define SRC_BUILD_FOLDER "./src_build/"
 
 #ifdef __APPLE__
-void cmd_cflags_x11(Nob_Cmd *cmd)
-{
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/libx11/1.8.13/include");
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/xorgproto/2025.1/include");
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/libxcb/1.17.0/include");
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/libxau/1.0.12/include");
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/libxdmcp/1.1.5/include");
-}
+    void cmd_cflags_x11(Nob_Cmd *cmd)
+    {
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/libx11/1.8.13/include");
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/xorgproto/2025.1/include");
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/libxcb/1.17.0/include");
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/libxau/1.0.12/include");
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/libxdmcp/1.1.5/include");
+    }
 
-void cmd_libs_x11(Nob_Cmd *cmd)
-{
-    cmd_append(cmd, "-L/opt/homebrew/Cellar/libxext/1.3.7/lib");
-    cmd_append(cmd, "-lXext"); 
-    cmd_append(cmd, "-L/opt/homebrew/Cellar/libx11/1.8.13/lib");
-    cmd_append(cmd, "-lX11");
-}
+    void cmd_libs_x11(Nob_Cmd *cmd)
+    {
+        cmd_append(cmd, "-L/opt/homebrew/Cellar/libxext/1.3.7/lib");
+        cmd_append(cmd, "-lXext"); 
+        cmd_append(cmd, "-L/opt/homebrew/Cellar/libx11/1.8.13/lib");
+        cmd_append(cmd, "-lX11");
+    }
 
-void cmd_cflags_pa(Nob_Cmd *cmd)
-{
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/pulseaudio/17.0/include");
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/glib/2.88.1/include/glib-2.0");
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/glib/2.88.1/lib/glib-2.0/include");
-    cmd_append(cmd, "-I/opt/homebrew/opt/gettext/include");
-    cmd_append(cmd, "-I/opt/homebrew/Cellar/pcre2/10.47_1/include");
-}
+    void cmd_cflags_pa(Nob_Cmd *cmd)
+    {
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/pulseaudio/17.0/include");
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/glib/2.88.1/include/glib-2.0");
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/glib/2.88.1/lib/glib-2.0/include");
+        cmd_append(cmd, "-I/opt/homebrew/opt/gettext/include");
+        cmd_append(cmd, "-I/opt/homebrew/Cellar/pcre2/10.47_1/include");
+    }
 
-void cmd_libs_pa(Nob_Cmd *cmd)
-{
-    cmd_append(cmd, "-D_REENTRANT");
-    cmd_append(cmd, "-L/opt/homebrew/Cellar/pulseaudio/17.0/lib");
-    cmd_append(cmd, "-lpulse-mainloop-glib");
-    cmd_append(cmd, "-L/opt/homebrew/Cellar/glib/2.88.1/lib");
-    cmd_append(cmd, "-lglib-2.0");
-    cmd_append(cmd, "-L/opt/homebrew/opt/gettext/lib");
-    cmd_append(cmd, "-lintl");
-    cmd_append(cmd, "-lpulse-simple");
-    cmd_append(cmd, "-lpulse");
-    cmd_append(cmd, "-pthread");
-}
+    void cmd_libs_pa(Nob_Cmd *cmd)
+    {
+        cmd_append(cmd, "-D_REENTRANT");
+        cmd_append(cmd, "-L/opt/homebrew/Cellar/pulseaudio/17.0/lib");
+        cmd_append(cmd, "-lpulse-mainloop-glib");
+        cmd_append(cmd, "-L/opt/homebrew/Cellar/glib/2.88.1/lib");
+        cmd_append(cmd, "-lglib-2.0");
+        cmd_append(cmd, "-L/opt/homebrew/opt/gettext/lib");
+        cmd_append(cmd, "-lintl");
+        cmd_append(cmd, "-lpulse-simple");
+        cmd_append(cmd, "-lpulse");
+        cmd_append(cmd, "-pthread");
+    }
 
-void cmd_framework(Nob_Cmd *cmd)
-{
-    nob_cmd_append(cmd, "-framework", "CoreVideo");
-    nob_cmd_append(cmd, "-framework", "Cocoa");
-    nob_cmd_append(cmd, "-framework", "IOKit");
-}
-#elif __linux__
-void cmd_cflags_x11(Nob_Cmd *cmd)
-{
-    (void) cmd;
-}
+    void cmd_framework(Nob_Cmd *cmd)
+    {
+        cmd_append(cmd, "-framework", "CoreFoundation");
+        cmd_append(cmd, "-framework", "CoreGraphics");
+        cmd_append(cmd, "-framework", "CoreVideo");
+        cmd_append(cmd, "-framework", "Cocoa");
+        cmd_append(cmd, "-framework", "IOKit");
+        cmd_append(cmd, "-framework", "OpenGL");
+    }
 
-void cmd_libs_x11(Nob_Cmd *cmd)
-{
-    cmd_append(cmd, "-lX11");
-    cmd_append(cmd, "-lXext"); 
-}
+    //raylib
+#define RAYLIB_INCLUDE "-I/Users/neowang/opt/raylib/include"
+#define RAYLIB_LIB     "-L/Users/neowang/opt/raylib/lib"
+    void cmd_cflags_raylib(Nob_Cmd *cmd) {
+        cmd_append(cmd, RAYLIB_INCLUDE);
+    }
+    void cmd_libs_raylib(Nob_Cmd *cmd) {
+        cmd_append(cmd, RAYLIB_LIB);
+        cmd_append(cmd, "-Xlinker", "-multiply_defined", "-Xlinker", "suppress");
+        cmd_append(cmd, "-lraylib");
+        cmd_append(cmd, "-lm");
+    }
+#elif defined(__linux__)
+    void cmd_cflags_x11(Nob_Cmd *cmd) { (void) cmd; }
 
-void cmd_cflags_pa(Nob_Cmd *cmd)
-{
-    (void) cmd;
-}
+    void cmd_libs_x11(Nob_Cmd *cmd)
+    {
+        cmd_append(cmd, "-lX11");
+        cmd_append(cmd, "-lXext"); 
+    }
 
-void cmd_libs_pa(Nob_Cmd *cmd)
-{
-    cmd_append(cmd, "-lpulse");
-    cmd_append(cmd, "-lpulse-simple");
-    cmd_append(cmd, "-lpulse-mainloop-glib");
-    cmd_append(cmd, "-lglib-2.0");
-    // cmd_append(cmd, "-lintl");
-    cmd_append(cmd, "-pthread");
-}
+    void cmd_cflags_pa(Nob_Cmd *cmd) { (void) cmd; }
 
-void cmd_framework(Nob_Cmd *cmd)
-{
-    (void) cmd;
-}
+    void cmd_libs_pa(Nob_Cmd *cmd)
+    {
+        cmd_append(cmd, "-lpulse");
+        cmd_append(cmd, "-lpulse-simple");
+        cmd_append(cmd, "-lpulse-mainloop-glib");
+        cmd_append(cmd, "-lglib-2.0");
+        cmd_append(cmd, "-pthread");
+    }
+
+    void cmd_framework(Nob_Cmd *cmd) { (void) cmd; }
+
+    //raylib
+#define RAYLIB_INCLUDE "-I/Users/neowang/opt/raylib/include"
+#define RAYLIB_LIB     "-L/Users/neowang/opt/raylib/lib"
+    void cmd_cflags_raylib(Nob_Cmd *cmd) {
+        cmd_append(cmd, RAYLIB_INCLUDE);
+    }
+    void cmd_libs_raylib(Nob_Cmd *cmd) {
+        cmd_append(cmd, RAYLIB_LIB);
+        cmd_append(cmd, "-lraylib");
+        cmd_append(cmd, "-Wl,-allow-multiple-definition");
+        cmd_append(cmd, "-lpthread");
+        cmd_append(cmd, "-ldl");
+        cmd_append(cmd, "-lrt");
+        cmd_append(cmd, "-lm");
+    }
+#elif defined(_WIN32)
+    void cmd_cflags_x11(Nob_Cmd *cmd) { (void) cmd; }
+    void cmd_libs_x11(Nob_Cmd *cmd) { (void) cmd; }
+    void cmd_cflags_pa(Nob_Cmd *cmd) { (void) cmd; }
+    void cmd_libs_pa(Nob_Cmd *cmd) { (void) cmd; }
+    void cmd_framework(Nob_Cmd *cmd) { (void) cmd; }
+
+    //raylib
+#define RAYLIB_INCLUDE "-IC:/raylib/include"
+#define RAYLIB_LIB     "-LC:/raylib/lib"
+    void cmd_cflags_raylib(Nob_Cmd *cmd) {
+        cmd_append(cmd, RAYLIB_INCLUDE);
+    }
+    void cmd_libs_raylib(Nob_Cmd *cmd) {
+        cmd_append(cmd, RAYLIB_LIB);
+        cmd_append(cmd, "-lraylib");
+        cmd_append(cmd, "-lopengl32");
+        cmd_append(cmd, "-lgdi32");
+        cmd_append(cmd, "-lwinmm");
+    }
 #else
-
 #error "Unsupported platform"
-
 #endif
 
 void compile_common(Nob_Cmd *cmd)
@@ -322,15 +362,28 @@ int main(int argc, char **argv) {
     compile_common(&cmd);
     cmd_cflags_x11(&cmd);
     cmd_cflags_pa(&cmd);
-    cmd_append(&cmd, "-o", BUILD_FOLDER"main");
-    cmd_append(&cmd, SRC_FOLDER"main.c");
+    cmd_append(&cmd, "-o", BUILD_FOLDER"game.x11pa");
+    cmd_append(&cmd, SRC_FOLDER"platform_X11Pulse.c");
     cmd_append(&cmd, SRC_FOLDER"game.c");
     cmd_libs_x11(&cmd);
     cmd_libs_pa(&cmd);
     cmd_append(&cmd, "-lm");
     cmd_framework(&cmd);
     if (!nob_cmd_run(&cmd)) return 1;
-    nob_log(NOB_INFO, "Compliled: ./build/main");
+    nob_log(NOB_INFO, "Compliled: ./build/game.x11pa");
+
+    // compile_common(&cmd);
+    // cmd_cflags_raylib(&cmd);
+    // cmd_append(&cmd, "-DSTB_VORBIS_HEADER_ONLY");
+    // cmd_append(&cmd, "-o", BUILD_FOLDER"game.rl");
+    // cmd_append(&cmd, "-I/Users/neowang/opt/raylib/include");
+    // cmd_append(&cmd, SRC_FOLDER"platform_raylib.c");
+    // cmd_append(&cmd, SRC_FOLDER"game.c");
+    // cmd_libs_raylib(&cmd);
+    // cmd_append(&cmd, "-lm");
+    // cmd_framework(&cmd);
+    // if (!nob_cmd_run(&cmd)) return 1;
+    // nob_log(NOB_INFO, "Compliled: ./build/game.rl");
 
     // // main run
     // cmd_append(&cmd, "./build/main");

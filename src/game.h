@@ -7,7 +7,11 @@
 
 typedef struct {
     bool keyboard[65536];
+    bool key_just_pressed[65536];
+    bool key_just_released[65536];
+    int mouse_dx_prev;
     int mouse_dx;
+    int mouse_dy_prev;
     int mouse_dy;
 } Controls;
 
@@ -37,5 +41,6 @@ Game game_init(void);
 void game_update(void);
 void game_key_up(int key);
 void game_key_down(int key);
+bool game_key_pressed(int key);
 
 #endif // GAMG_H_
